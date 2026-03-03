@@ -79,6 +79,8 @@ async def debug_db():
     settings = get_settings()
     result["pghost"] = settings.pg_host
     result["pgschema"] = settings.pg_schema
+    result["pguser"] = settings.pg_user
+    result["sqlalchemy_url"] = settings.sqlalchemy_url.split(":")[0] + "://" + settings.pg_user + "@..."
 
     try:
         engine = get_engine()
