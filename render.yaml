@@ -5,28 +5,24 @@ services:
     region: singapore
     plan: free
     rootDir: .
-    buildCommand: >
-      pip install -r backend/requirements.txt &&
-      cd frontend &&
-      npm install &&
-      npm run build
-    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    buildCommand: bash build.sh
+    startCommand: bash start.sh
     envVars:
       - key: PGHOST
-        sync: false
+        value: db.okjrtyiucbywjhqgvxsd.supabase.co
       - key: PGPORT
-        value: "5432"
+        value: 5432
       - key: PGDATABASE
-        sync: false
+        value: postgres
       - key: PGUSER
-        sync: false
+        value: postgres
       - key: PGPASSWORD
         sync: false
       - key: PGSCHEMA
-        value: "dm"
+        value: public
       - key: APP_NAME
-        value: "Maple Meta Dashboard"
+        value: Maple Meta Dashboard
       - key: SELF_PING_URL
         sync: false
       - key: PATCH_NOTE_BASE_PATH
-        value: ""
+        value: 
