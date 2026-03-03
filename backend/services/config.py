@@ -21,9 +21,12 @@ class Settings:
 
     @property
     def sqlalchemy_url(self) -> str:
+        from urllib.parse import quote_plus
+        user = quote_plus(self.pg_user)
+        pwd = quote_plus(self.pg_password)
         return (
             "postgresql+psycopg://"
-            f"{self.pg_user}:{self.pg_password}@{self.pg_host}:{self.pg_port}/{self.pg_database}"
+            f"{user}:{pwd}@{self.pg_host}:{self.pg_port}/{self.pg_database}"
         )
 
 

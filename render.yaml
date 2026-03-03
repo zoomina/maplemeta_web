@@ -9,13 +9,13 @@ services:
     startCommand: bash start.sh
     envVars:
       - key: PGHOST
-        value: db.okjrtyiucbywjhqgvxsd.supabase.co
+        value: aws-0-us-east-1.pooler.supabase.com
       - key: PGPORT
-        value: 5432
+        value: "6543"
       - key: PGDATABASE
         value: postgres
       - key: PGUSER
-        value: postgres
+        value: postgres.okjrtyiucbywjhqgvxsd
       - key: PGPASSWORD
         sync: false
       - key: PGSCHEMA

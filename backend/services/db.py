@@ -14,7 +14,7 @@ def get_engine() -> Engine:
         pool_size=1,
         max_overflow=0,
         pool_recycle=300,
-        connect_args={"connect_timeout": 5},
+        connect_args={"connect_timeout": 5, "prepare_threshold": 0},
     )
 
 

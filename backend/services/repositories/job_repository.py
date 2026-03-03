@@ -72,7 +72,7 @@ def _safe_character_master_frame(limit: int = 2000) -> pd.DataFrame:
     settings = get_settings()
     cols = _get_table_columns("character_master")
     if not cols:
-        return pd.DataFrame()
+        return _fallback_characters()
 
     job_col = _pick_column(cols, ["job"])
     type_col = _pick_column(cols, ["type", "job_type"])
@@ -115,6 +115,12 @@ def _safe_character_master_frame(limit: int = 2000) -> pd.DataFrame:
 
 
 def _fallback_characters() -> pd.DataFrame:
+    csv_path = Path(__file__).resolve().parent.parent.parent / "data" / "character_master.csv"
+    if csv_path.exists():
+        try:
+            return pd.read_csv(csv_path)
+        except Exception:
+            pass
     return pd.DataFrame(
         [
             {"job": "히어로", "type": "전사", "category": "모험가", "main_stat": "STR", "img": ""},
