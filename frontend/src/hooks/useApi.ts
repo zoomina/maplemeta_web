@@ -9,6 +9,9 @@ export interface UseApiResult<T> {
   refetch: () => void;
 }
 
+const cache = new Map<string, { data: unknown; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export function useApi<T>(url: string | null, deps: unknown[] = []): UseApiResult<T> {
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,6 +22,17 @@ export function useApi<T>(url: string | null, deps: unknown[] = []): UseApiResul
   useEffect(() => {
     if (!url) return;
     let cancelled = false;
+
+    // Check cache first
+    const cached = cache.get(url);
+    if (cached && cached.expires > Date.now()) {
+      setData(cached.data as T);
+      setLoading(false);
+      setError(null);
+      setIsColdStart(false);
+      return;
+    }
+
     const coldStartTimer = setTimeout(() => {
       if (!cancelled) setIsColdStart(true);
     }, 5000);
@@ -30,6 +44,7 @@ export function useApi<T>(url: string | null, deps: unknown[] = []): UseApiResul
       .get<T>(url, { timeout: 60000 })
       .then((res) => {
         if (!cancelled) {
+          cache.set(url, { data: res.data, expires: Date.now() + CACHE_TTL });
           setData(res.data);
           setIsColdStart(false);
         }
@@ -52,5 +67,14 @@ export function useApi<T>(url: string | null, deps: unknown[] = []): UseApiResul
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [url, tick, ...deps]);
 
-  return { data, loading, error, isColdStart, refetch: () => setTick((t) => t + 1) };
+  return {
+    data,
+    loading,
+    error,
+    isColdStart,
+    refetch: () => {
+      if (url) cache.delete(url);
+      setTick((t) => t + 1);
+    },
+  };
 }

@@ -7,6 +7,7 @@ import pandas as pd
 from fastapi import APIRouter, HTTPException, Query
 
 from services.repositories.job_repository import (
+    _build_ranking_panel_frame,
     get_character_detail,
     get_floor50_ranking,
     get_stat_item_frames,
@@ -92,10 +93,11 @@ def job_ranking(
     type: str = Query("전체"),
     version: str = Query(""),
 ) -> List[Dict[str, Any]]:
-    frame = get_floor50_ranking(type_filter=type)
-    if frame.empty:
+    version_val = version.strip() if version.strip() else None
+    panel, _ = _build_ranking_panel_frame(type_filter=type, version=version_val)
+    if panel.empty:
         return []
-    return _df_to_records(frame)
+    return _df_to_records(panel)
 
 
 @router.get("/{job}/stats", response_model=None)

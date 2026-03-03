@@ -26,7 +26,7 @@ export function JobPage() {
   }, [versions, selectedVersion]);
 
   const jobListUrl = `/api/job/list?type=${encodeURIComponent(selectedType)}&keyword=${encodeURIComponent(keyword)}`;
-  const rankingUrl = `/api/job/ranking?type=${encodeURIComponent(selectedType)}&version=${encodeURIComponent(selectedVersion)}`;
+  const rankingUrl = selectedVersion ? `/api/job/ranking?type=${encodeURIComponent(selectedType)}&version=${encodeURIComponent(selectedVersion)}` : null;
   const detailUrl = selectedJob ? `/api/job/${encodeURIComponent(selectedJob)}` : null;
   const statsUrl = selectedJob
     ? `/api/job/${encodeURIComponent(selectedJob)}/stats?segment=${encodeURIComponent(segment)}&version=${encodeURIComponent(selectedVersion)}`
@@ -308,7 +308,7 @@ export function JobPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#2A2D3E]">
-                      {Object.keys(ranking.data[0]).slice(0, 5).map((k) => (
+                      {Object.keys(ranking.data[0]).map((k) => (
                         <th key={k} className="px-4 py-2.5 text-left text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">
                           {k}
                         </th>
@@ -325,7 +325,7 @@ export function JobPage() {
                           onClick={() => jobName && openDetail(jobName)}
                           className="border-b border-[#2A2D3E]/50 hover:bg-[#1F2440] cursor-pointer transition-colors"
                         >
-                          {Object.keys(ranking.data![0]).slice(0, 5).map((k) => (
+                          {Object.keys(ranking.data![0]).map((k) => (
                             <td key={k} className="px-4 py-2.5 text-[#94A3B8]">
                               {k === 'job' || k === '직업' ? (
                                 <div className="flex items-center gap-2">

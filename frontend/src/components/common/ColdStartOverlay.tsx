@@ -10,8 +10,7 @@ export function ColdStartOverlay({ visible }: Props) {
         <div className="text-5xl font-black text-[#FF8C00] tracking-tight">MAPLE</div>
         <div className="text-xl font-semibold text-[#F1F5F9]">서버를 깨우는 중입니다</div>
         <p className="text-sm text-[#94A3B8] max-w-xs leading-relaxed">
-          Render Hobby 플랜은 비활성 시 서버가 잠시 잠듭니다.<br />
-          최대 30초 정도 소요될 수 있습니다.
+          데이터를 로드하는 중입니다.
         </p>
         <LoadingSpinner size="lg" className="mt-2" />
         <div className="flex gap-1.5 mt-2">

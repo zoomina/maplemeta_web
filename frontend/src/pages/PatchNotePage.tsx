@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 import { useApi } from '../hooks/useApi';
 import { VersionDetail } from '../types';
 import { LoadingSpinner } from '../components/common/LoadingSpinner';
@@ -64,7 +65,7 @@ export function PatchNotePage() {
         <div className="card">
           {patchNote.content ? (
             <div className="prose-dark">
-              <ReactMarkdown>{patchNote.content}</ReactMarkdown>
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>{patchNote.content}</ReactMarkdown>
             </div>
           ) : (
             <p className="text-[#64748B] text-sm py-8 text-center">패치노트 파일을 찾을 수 없습니다.</p>

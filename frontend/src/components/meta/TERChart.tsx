@@ -5,7 +5,7 @@ interface Props { data: TERJobData[]; }
 
 function buildBins(data: TERJobData[], nBins = 20) {
   const valid = data.filter((d) => d.ter_p50 != null && d.ter_p50 > 0);
-  if (!valid.length) return { labels: [], high: [], low: [] };
+  if (!valid.length) return { labels: [], high: [], low: [], shadeStart: null, shadeEnd: null };
 
   const vals = valid.map((d) => d.ter_p50);
   const min = Math.min(...vals);
@@ -21,13 +21,35 @@ function buildBins(data: TERJobData[], nBins = 20) {
     if (item.floor50_rate >= 0.5) high[idx]++;
     else low[idx]++;
   }
-  return { labels, high, low };
+
+  // Comfortable zone: IQR of high-performers' TER values
+  const highVals = valid.filter((d) => d.floor50_rate >= 0.5).map((d) => d.ter_p50).sort((a, b) => a - b);
+  let shadeStart: string | null = null;
+  let shadeEnd: string | null = null;
+  if (highVals.length >= 4) {
+    const p25 = highVals[Math.floor(highVals.length * 0.25)];
+    const p75 = highVals[Math.floor(highVals.length * 0.75)];
+    shadeStart = p25.toFixed(2);
+    shadeEnd = p75.toFixed(2);
+  }
+
+  return { labels, high, low, shadeStart, shadeEnd };
 }
 
 export function TERChart({ data }: Props) {
   if (!data.length) return <p className="text-[#64748B] text-sm py-4 text-center">데이터 없음</p>;
 
-  const { labels, high, low } = buildBins(data);
+  const { labels, high, low, shadeStart, shadeEnd } = buildBins(data);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const markArea: any = shadeStart && shadeEnd
+    ? {
+        silent: true,
+        itemStyle: { color: 'rgba(16,185,129,0.08)', borderColor: 'rgba(16,185,129,0.3)', borderWidth: 1 },
+        data: [[{ xAxis: shadeStart, name: '여유 구간' }, { xAxis: shadeEnd }]],
+        label: { show: true, position: 'insideTop', color: 'rgba(16,185,129,0.7)', fontSize: 10, formatter: '여유 구간' },
+      }
+    : undefined;
 
   const option = {
     backgroundColor: 'transparent',
@@ -75,6 +97,7 @@ export function TERChart({ data }: Props) {
         barMaxWidth: 20,
         itemStyle: { color: 'rgba(16,185,129,0.7)' },
         stack: 'total',
+        markArea,
       },
       {
         name: '50층 미만',
