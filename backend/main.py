@@ -65,6 +65,50 @@ async def health():
     return {"status": "ok"}
 
 
+
+@app.get("/api/debug/db", response_model=None)
+async def debug_db():
+    """Temp debug: DB connection and data check."""
+    import traceback
+    from services.config import get_settings
+    from services.db import get_engine
+    from sqlalchemy import text
+    import pandas as pd
+
+    result = {}
+    settings = get_settings()
+    result["pghost"] = settings.pg_host
+    result["pgschema"] = settings.pg_schema
+
+    try:
+        engine = get_engine()
+        with engine.connect() as conn:
+            row = conn.execute(text("SELECT version()")).fetchone()
+            result["pg_version"] = str(row[0])[:80] if row else None
+
+            df = pd.read_sql_query(
+                text("SELECT column_name FROM information_schema.columns WHERE table_schema=:s AND table_name=:t ORDER BY ordinal_position"),
+                conn,
+                params={"s": settings.pg_schema, "t": "character_master"},
+            )
+            result["char_cols"] = df["column_name"].tolist() if not df.empty else []
+
+            df2 = pd.read_sql_query(
+                text('SELECT "job","img","color" FROM public.character_master LIMIT 2'),
+                conn,
+            )
+            result["char_sample"] = df2.to_dict(orient="records")
+
+            row2 = conn.execute(text('SELECT COUNT(*) FROM public.dm_rank')).fetchone()
+            result["dm_rank_count"] = int(row2[0]) if row2 else None
+
+    except Exception as e:
+        result["error"] = str(e)
+        result["traceback"] = traceback.format_exc()[-800:]
+
+    return result
+
+
 # Static files
 _static_dir = Path(__file__).parent / "static"
 if _static_dir.exists():
