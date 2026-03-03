@@ -21,10 +21,14 @@ _URL_STATIC_PREFIX = "/static"
 
 
 def _resolve_img_url(img_full_resolved: Optional[str]) -> Optional[str]:
-    """Convert local /home/jamin/static/... path to /static/... URL."""
+    """Convert local /home/jamin/static/... path to /static/... URL.
+    Supabase Storage URLs (https://...) are returned as-is.
+    """
     if not img_full_resolved:
         return img_full_resolved
     s = str(img_full_resolved).strip()
+    if s.startswith("http://") or s.startswith("https://"):
+        return s
     if s.startswith(_LOCAL_STATIC_PREFIX):
         return _URL_STATIC_PREFIX + s[len(_LOCAL_STATIC_PREFIX):]
     return s

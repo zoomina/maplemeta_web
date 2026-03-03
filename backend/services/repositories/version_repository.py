@@ -7,6 +7,8 @@ import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+import httpx
+
 from services.config import get_settings
 from services.db import get_engine
 
@@ -140,9 +142,17 @@ def get_version_detail(version: str) -> dict | None:
 
 
 def read_patch_note_content(path: str) -> str:
-    """patch_note 파일 내용 읽기. 경로 매핑 후 실제 파일에서 로드."""
+    """patch_note 내용 읽기. URL이면 HTTP fetch, 로컬 경로면 파일 읽기."""
     if not path or not str(path).strip():
         return ""
+    path = str(path).strip()
+    if path.startswith("http://") or path.startswith("https://"):
+        try:
+            resp = httpx.get(path, timeout=10)
+            resp.raise_for_status()
+            return resp.text
+        except Exception:
+            return ""
     mapped = _map_patch_note_path(path)
     if not mapped or not mapped.exists():
         return ""

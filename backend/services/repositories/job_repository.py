@@ -164,12 +164,10 @@ def _normalize_character_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def _resolve_img_full(raw: str | None) -> str | None:
-    """Resolve img_full DB path to local filesystem path.
+    """Resolve img_full to a URL or local path.
 
-    DB stores: /static/img/character/아크.png (또는 .jpg)
-    Actual files: /home/jamin/static/character/아크.jpg
-    Strategy: strip /static/img/ prefix, map to /home/jamin/static/.
-    DB에 .png 저장 시 실제 파일은 .jpg일 수 있음 → .jpg 우선 시도.
+    - Supabase Storage URL (https://...): returned as-is
+    - Legacy local path (/static/img/character/...): mapped to filesystem
     """
     if not raw:
         return None
@@ -177,7 +175,11 @@ def _resolve_img_full(raw: str | None) -> str | None:
     if not value:
         return None
 
-    # Remove leading /static/img/ and replace with /home/jamin/static/
+    # Already a URL (Supabase Storage or external)
+    if value.startswith("http://") or value.startswith("https://"):
+        return value
+
+    # Legacy local path fallback
     if value.startswith("/static/img/"):
         relative = value[len("/static/img/"):]
         base = Path("/home/jamin/static") / relative
@@ -187,16 +189,12 @@ def _resolve_img_full(raw: str | None) -> str | None:
     else:
         base = Path("/home/jamin") / value.lstrip("/")
 
-    # Try the path as-is first
     if base.exists():
         return str(base)
-
-    # DB에 .png 저장돼도 실제 파일은 .jpg인 경우 많음 → .jpg 우선
     for ext in [".jpg", ".jpeg", ".webp", ".png"]:
         candidate = base.with_suffix(ext)
         if candidate.exists():
             return str(candidate)
-
     return None
 
 
