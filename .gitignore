@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Env
+.env
+!.env.example
+
+# Frontend build (Render가 빌드하므로 제외)
+backend/static/
+
+# Node
+frontend/node_modules/
+
+# IDE
+.idea/
+.vscode/
+*.swp

@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: maplemeta-web
+    env: python
+    region: singapore
+    plan: free
+    rootDir: .
+    buildCommand: >
+      pip install -r backend/requirements.txt &&
+      cd frontend &&
+      npm install &&
+      npm run build
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PGHOST
+        sync: false
+      - key: PGPORT
+        value: "5432"
+      - key: PGDATABASE
+        sync: false
+      - key: PGUSER
+        sync: false
+      - key: PGPASSWORD
+        sync: false
+      - key: PGSCHEMA
+        value: "dm"
+      - key: APP_NAME
+        value: "Maple Meta Dashboard"
+      - key: SELF_PING_URL
+        sync: false
+      - key: PATCH_NOTE_BASE_PATH
+        value: ""

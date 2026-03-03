@@ -1,0 +1,9 @@
+version,start_date,end_date,type,impacted_job,patch_note
+12405,2025-07-17,2025-08-20,{스킬},{},/opt/airflow/static/update/12405_patch_note.md
+12406,2025-08-21,2025-09-17,"{스킬,이벤트,시스템}",{},/opt/airflow/static/update/12406_patch_note.md
+12407,2025-09-18,2025-10-22,"{스킬,이벤트,시스템}",{},/opt/airflow/static/update/12407_patch_note.md
+12408,2025-10-23,2025-11-19,"{캐릭터,스킬,이벤트,시스템}",{와일드헌터},/opt/airflow/static/update/12408_patch_note.md
+12409,2025-11-20,2025-12-17,{},{},/opt/airflow/static/update/12409_patch_note.md
+12410,2025-12-18,2026-01-14,"{캐릭터,이벤트,시스템}",{키네시스},/opt/airflow/static/update/12410_patch_note.md
+12411,2026-01-15,2026-02-11,"{아이템,스킬,이벤트,시스템}",{},/opt/airflow/static/update/12411_patch_note.md
+12412,2026-02-12,"",{},{},/opt/airflow/static/update/12412_patch_note.md
