@@ -79,7 +79,10 @@ async def debug_db():
     settings = get_settings()
     result["pghost"] = settings.pg_host
     result["pgschema"] = settings.pg_schema
+    import os as _os
     result["pguser"] = settings.pg_user
+    result["PGUSER_env"] = _os.environ.get("PGUSER", "NOT_SET")
+    result["PGHOST_env"] = _os.environ.get("PGHOST", "NOT_SET")
     result["sqlalchemy_url"] = settings.sqlalchemy_url.split(":")[0] + "://" + settings.pg_user + "@..."
 
     try:
