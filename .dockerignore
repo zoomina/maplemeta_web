@@ -1,0 +1,12 @@
+.git
+.gitignore
+**/__pycache__
+**/*.pyc
+**/.env
+**/node_modules
+frontend/dist
+backend/static
+render.yaml
+build.sh
+start.sh
+README.md
