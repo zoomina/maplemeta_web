@@ -320,7 +320,7 @@ def _read_balance_score_from_dm(version: str) -> dict | None:
 
 
 def _compute_violin(work: pd.DataFrame) -> pd.DataFrame:
-    """직업별 층수 분포. 직업별 max, min, avg, median, n 집계 포함."""
+    """직업별 층수 분포. 직업별 max, min, avg, median, Q1, Q3, n 집계 포함."""
     violin = work[["job_name", "floor"]].dropna().copy()
     if violin.empty:
         return violin
@@ -331,6 +331,8 @@ def _compute_violin(work: pd.DataFrame) -> pd.DataFrame:
             floor_min=("floor", "min"),
             floor_avg=("floor", "mean"),
             floor_median=("floor", "median"),
+            floor_q1=("floor", lambda x: x.quantile(0.25)),
+            floor_q3=("floor", lambda x: x.quantile(0.75)),
             n=("floor", "count"),
         )
     )

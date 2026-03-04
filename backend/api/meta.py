@@ -110,6 +110,8 @@ def meta_overview(
                 except (TypeError, ValueError):
                     pass
             sty = style_map.get(jn, {})
+            floor_q1 = _safe_float(first.get("floor_q1")) if "floor_q1" in first.index else None
+            floor_q3 = _safe_float(first.get("floor_q3")) if "floor_q3" in first.index else None
             violin_out.append({
                 "job_name": jn,
                 "color": sty.get("color", ""),
@@ -119,6 +121,8 @@ def meta_overview(
                 "floor_min": floor_min,
                 "floor_avg": floor_avg,
                 "floor_median": floor_median,
+                "floor_q1": floor_q1,
+                "floor_q3": floor_q3,
                 "density": density,
             })
 

@@ -29,6 +29,8 @@ export interface ViolinJobData {
   floor_min: number;
   floor_avg: number;
   floor_median: number;
+  floor_q1: number | null;
+  floor_q3: number | null;
   density: [number, number][];
 }
 

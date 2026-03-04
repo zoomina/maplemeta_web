@@ -4,7 +4,7 @@ import { ViolinJobData } from '../../types';
 interface Props { data: ViolinJobData[]; }
 
 function hexToRgba(hex: string, alpha: number): string {
-  const c = hex.replace('#', '');
+  const c = (hex || '').replace('#', '');
   if (c.length !== 6) return `rgba(99,110,250,${alpha})`;
   const r = parseInt(c.slice(0, 2), 16);
   const g = parseInt(c.slice(2, 4), 16);
@@ -12,53 +12,106 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r},${g},${b},${alpha})`;
 }
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function makeViolinRenderItem(violinData: ViolinJobData[]) {
-  const maxN = Math.max(...violinData.map((d) => d.n || 1));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function (params: any, api: any) {
     const job = violinData[params.dataIndex];
-    if (!job || job.density.length < 4) return null;
+    if (!job || job.density.length < 2) return null;
 
     const catX = params.dataIndex;
-    const absoluteMaxHalfWidth = api.size([0.42, 0])[0] * 0.5;
-    // 모수에 비례한 폭 (sqrt로 비율 완화, 최소 20% 보장)
-    const nRatio = Math.max(0.2, Math.sqrt((job.n || 1) / maxN));
-    const maxHalfWidth = absoluteMaxHalfWidth * nRatio;
+    // 각 지점 폭 = density × n / globalMaxN (실제 밀도 × 모수 선형 비례)
+    const maxN = Math.max(...violinData.map((d) => d.n || 1));
+    const nRatio = (job.n || 1) / maxN;
+    const maxHalfWidth = (api.size([0.4, 0]) as [number, number])[0] * 0.5 * nRatio;
+    const centerX = (api.coord([catX, 0]) as [number, number])[0];
 
+    // 바이올린 폴리곤
     const leftPts: [number, number][] = [];
     const rightPts: [number, number][] = [];
-
     for (const [y, d] of job.density) {
-      const coord = api.coord([catX, y]);
+      const [px, py] = api.coord([catX, y]) as [number, number];
       const hw = d * maxHalfWidth;
-      leftPts.push([coord[0] - hw, coord[1]]);
-      rightPts.push([coord[0] + hw, coord[1]]);
+      leftPts.push([px - hw, py]);
+      rightPts.push([px + hw, py]);
     }
-
     const allPts = [...leftPts, ...rightPts.reverse()];
+
     const color = job.color || '#6366f1';
-    const fill = hexToRgba(color, 0.35);
-    const medianCoord = api.coord([catX, job.floor_median]);
+    const fill = hexToRgba(color, 0.28);
+
+    // 박스플롯 좌표
+    const q1 = job.floor_q1 ?? job.floor_median;
+    const q3 = job.floor_q3 ?? job.floor_median;
+    const [, q1Y] = api.coord([catX, q1]) as [number, number];
+    const [, q3Y] = api.coord([catX, q3]) as [number, number];
+    const [, medY] = api.coord([catX, job.floor_median]) as [number, number];
+    const [, minY] = api.coord([catX, job.floor_min]) as [number, number];
+    const [, maxY] = api.coord([catX, job.floor_max]) as [number, number];
+
+    const boxHW = maxHalfWidth * 0.22;
+    const capHW = maxHalfWidth * 0.14;
+
+    // q1Y > q3Y (픽셀 기준: 높은 층 = 위 = 작은 픽셀 Y)
+    const boxTop = Math.min(q1Y, q3Y);
+    const boxHeight = Math.abs(q1Y - q3Y);
 
     return {
       type: 'group',
       children: [
+        // 바이올린 몸체
         {
           type: 'polygon',
           shape: { points: allPts },
           style: { fill, stroke: color, lineWidth: 1.5 },
           z2: 10,
         },
+        // 하단 수염: min → Q1
         {
           type: 'line',
-          shape: {
-            x1: medianCoord[0] - maxHalfWidth * 0.6,
-            y1: medianCoord[1],
-            x2: medianCoord[0] + maxHalfWidth * 0.6,
-            y2: medianCoord[1],
-          },
-          style: { stroke: '#ffffff', lineWidth: 2, opacity: 0.9 },
+          shape: { x1: centerX, y1: minY, x2: centerX, y2: q1Y },
+          style: { stroke: color, lineWidth: 1.2, opacity: 0.8 },
           z2: 11,
+        },
+        // 상단 수염: Q3 → max
+        {
+          type: 'line',
+          shape: { x1: centerX, y1: q3Y, x2: centerX, y2: maxY },
+          style: { stroke: color, lineWidth: 1.2, opacity: 0.8 },
+          z2: 11,
+        },
+        // min 캡
+        {
+          type: 'line',
+          shape: { x1: centerX - capHW, y1: minY, x2: centerX + capHW, y2: minY },
+          style: { stroke: color, lineWidth: 1.5 },
+          z2: 11,
+        },
+        // max 캡
+        {
+          type: 'line',
+          shape: { x1: centerX - capHW, y1: maxY, x2: centerX + capHW, y2: maxY },
+          style: { stroke: color, lineWidth: 1.5 },
+          z2: 11,
+        },
+        // IQR 박스 (Q1~Q3)
+        {
+          type: 'rect',
+          shape: {
+            x: centerX - boxHW,
+            y: boxTop,
+            width: boxHW * 2,
+            height: boxHeight,
+          },
+          style: { fill: hexToRgba(color, 0.6), stroke: color, lineWidth: 1.5 },
+          z2: 12,
+        },
+        // 중앙값 선
+        {
+          type: 'line',
+          shape: { x1: centerX - boxHW, y1: medY, x2: centerX + boxHW, y2: medY },
+          style: { stroke: '#ffffff', lineWidth: 2.5 },
+          z2: 13,
         },
       ],
     };
@@ -82,7 +135,6 @@ export function ViolinChart({ data }: Props) {
     }
   });
 
-  // Y축 범위: 데이터 기반 (1~100 사이)
   const allMins = data.map((d) => d.floor_min ?? 1);
   const allMaxs = data.map((d) => d.floor_max ?? 100);
   const yMin = Math.max(1, Math.floor(Math.min(...allMins)) - 2);
@@ -108,7 +160,7 @@ export function ViolinChart({ data }: Props) {
         rich: {
           ...richLabels,
           ...Object.fromEntries(
-            data.map((job, idx) => [
+            data.map((_job, idx) => [
               `name${idx}`,
               { color: '#94A3B8', fontSize: 11, align: 'center' },
             ])
@@ -143,10 +195,13 @@ export function ViolinChart({ data }: Props) {
         const imgHtml = job.img
           ? `<img src="${job.img}" style="width:36px;height:36px;border-radius:50%;object-fit:cover;margin-right:8px;border:2px solid ${job.color || '#6366f1'};" />`
           : '';
+        const q1 = job.floor_q1 != null ? job.floor_q1.toFixed(0) : '-';
+        const q3 = job.floor_q3 != null ? job.floor_q3.toFixed(0) : '-';
         return `<div style="display:flex;align-items:center;gap:4px;margin-bottom:6px">
           ${imgHtml}<strong style="color:${job.color || '#6366f1'}">${job.job_name}</strong>
         </div>
         최고 ${job.floor_max}층 · 최소 ${job.floor_min}층<br/>
+        Q3 ${q3}층 · Q1 ${q1}층<br/>
         평균 ${job.floor_avg?.toFixed(1)}층 · 중앙값 ${job.floor_median?.toFixed(0)}층<br/>
         <span style="color:#64748B">(${job.n?.toLocaleString()}명)</span>`;
       },
@@ -161,5 +216,5 @@ export function ViolinChart({ data }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 400 }} notMerge />;
+  return <ReactECharts option={option} style={{ height: 420 }} notMerge />;
 }
