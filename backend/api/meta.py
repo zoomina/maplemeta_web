@@ -13,13 +13,22 @@ router = APIRouter()
 
 
 def _kde_violin(values: List[float], n_points: int = 60) -> List[List[float]]:
-    """Gaussian KDE density. Returns [[y_value, normalized_density], ...]"""
+    """Gaussian KDE density. Returns [[y_value, normalized_density], ...]
+
+    프론트 ViolinChart는 1~100층 구간만 그리므로,
+    커널 범위도 실제 데이터 구간(및 1~100) 안으로 클램프한다.
+    """
     if len(values) < 3:
-        return [[float(v), 1.0] for v in values]
+        return [[float(max(1.0, min(100.0, v))), 1.0] for v in values]
     arr = np.array(values, dtype=float)
     bw = max(1.06 * float(np.std(arr)) * len(arr) ** (-0.2), 0.5)
     y_min, y_max = float(arr.min()), float(arr.max())
-    y_grid = np.linspace(y_min - bw * 2, y_max + bw * 2, n_points)
+    # 데이터는 1~100층 범위이므로, KDE 축도 1~100 안에서만 계산
+    lower = max(1.0, y_min)
+    upper = min(100.0, y_max)
+    if upper <= lower:
+        upper = lower + 1.0
+    y_grid = np.linspace(lower, upper, n_points)
     density = np.zeros(n_points)
     for val in arr:
         density += np.exp(-0.5 * ((y_grid - val) / bw) ** 2)
