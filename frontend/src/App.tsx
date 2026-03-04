@@ -23,6 +23,9 @@ export default function App() {
               <Route path="/patch-notes" element={<PatchNotePage />} />
             </Routes>
           </main>
+          <footer className="mt-8 border-t border-gray-800 py-4 text-center text-xs text-gray-400">
+            Data based on NEXON Open API
+          </footer>
         </div>
       </BrowserRouter>
     </VersionContext.Provider>
