@@ -20,7 +20,7 @@ function makeViolinRenderItem(violinData: ViolinJobData[]) {
     if (!job || job.density.length < 2) return null;
 
     const catX = params.dataIndex;
-    // 각 지점 폭 = density × n / globalMaxN (실제 밀도 × 모수 선형 비례)
+    // 모든 바이올린 동일 최대 폭 — KDE 형태가 분포를 표현 (좁은 분포 → 뾰족, 넓은 분포 → 퍼짐)
     const maxN = Math.max(...violinData.map((d) => d.n || 1));
     const nRatio = (job.n || 1) / maxN;
     const maxHalfWidth = (api.size([0.4, 0]) as [number, number])[0] * 0.5 * nRatio;
