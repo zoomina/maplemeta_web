@@ -277,20 +277,20 @@ export function JobPage() {
               <button
                 key={job.job}
                 onClick={() => openDetail(job.job)}
-                className="flex flex-col items-center gap-1 p-2 rounded-lg hover:bg-[#1F2440] transition-colors group"
+                className="flex flex-col items-center gap-1.5 p-2 rounded-lg border border-[#2A2D3E] hover:bg-[#1F2440] hover:border-[#FF8C00]/50 transition-colors group"
               >
                 {job.img ? (
                   <img
                     src={job.img}
                     alt={job.job}
-                    className="w-10 h-10 rounded-full object-cover border-2 border-[#2A2D3E] group-hover:border-[#FF8C00] transition-colors"
+                    className="w-full aspect-square rounded-md object-cover border border-[#2A2D3E] group-hover:border-[#FF8C00] transition-colors"
                   />
                 ) : (
-                  <div className="w-10 h-10 rounded-full bg-[#2A2D3E] flex items-center justify-center text-xs text-[#64748B]">
+                  <div className="w-full aspect-square rounded-md bg-[#2A2D3E] flex items-center justify-center text-xs text-[#64748B]">
                     {job.job[0]}
                   </div>
                 )}
-                <span className="text-xs text-[#94A3B8] group-hover:text-[#F1F5F9] text-center leading-tight line-clamp-2">
+                <span className="text-xs text-[#94A3B8] group-hover:text-[#F1F5F9] text-center leading-tight line-clamp-2 w-full">
                   {job.job}
                 </span>
               </button>
@@ -302,7 +302,7 @@ export function JobPage() {
         <div className="col-span-5 md:col-span-7">
           <h3 className="text-sm font-bold text-[#F1F5F9] mb-3">전체 랭킹</h3>
           {ranking.loading && <LoadingSpinner className="py-8" />}
-          {ranking.data && ranking.data.length > 0 && (
+          {!ranking.loading && ranking.data && ranking.data.length > 0 && (
             <div className="card overflow-hidden p-0">
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
@@ -330,7 +330,7 @@ export function JobPage() {
                               {k === 'job' || k === '직업' ? (
                                 <div className="flex items-center gap-2">
                                   {jobInfo?.img && (
-                                    <img src={jobInfo.img} alt={String(row[k])} className="w-6 h-6 rounded-full object-cover" />
+                                    <img src={jobInfo.img} alt={String(row[k])} className="w-6 h-6 rounded object-cover" />
                                   )}
                                   <span className="text-[#F1F5F9]">{String(row[k] ?? '-')}</span>
                                 </div>
@@ -346,6 +346,9 @@ export function JobPage() {
                 </table>
               </div>
             </div>
+          )}
+          {!ranking.loading && (!ranking.data || ranking.data.length === 0) && (
+            <p className="text-sm text-[#64748B] py-6 text-center">데이터 없음</p>
           )}
         </div>
       </div>

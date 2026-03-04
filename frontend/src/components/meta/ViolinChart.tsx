@@ -80,18 +80,31 @@ export function ViolinChart({ data }: Props) {
 
   const option = {
     backgroundColor: 'transparent',
-    grid: { top: 20, bottom: 72, left: 50, right: 20 },
+    grid: { top: 20, bottom: 100, left: 50, right: 20 },
     xAxis: {
       type: 'category',
       data: jobNames,
       axisLabel: {
         interval: 0,
+        // 이미지 위 + 직업명 아래 (줄바꿈)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        formatter: (_name: string, idx: number) => {
+        formatter: (name: string, idx: number) => {
           const job = data[idx];
-          return job?.img ? `{img${idx}|}` : (_name.length > 4 ? _name.slice(0, 4) : _name);
+          const jobName = (name || job?.job_name || '').trim();
+          if (job?.img) {
+            return `{img${idx}|}\n{name${idx}|${jobName}}`;
+          }
+          return jobName.length > 4 ? jobName.slice(0, 4) : jobName;
         },
-        rich: richLabels,
+        rich: {
+          ...richLabels,
+          ...Object.fromEntries(
+            data.map((job, idx) => [
+              `name${idx}`,
+              { color: '#94A3B8', fontSize: 10, align: 'center' },
+            ])
+          ),
+        },
         color: '#94A3B8',
         fontSize: 11,
       },
@@ -102,6 +115,8 @@ export function ViolinChart({ data }: Props) {
     yAxis: {
       type: 'value',
       name: '층수',
+      min: 1,
+      max: 100,
       nameTextStyle: { color: '#94A3B8', fontSize: 11 },
       splitLine: { lineStyle: { color: '#2A2D3E', type: 'dashed' as const } },
       axisLine: { show: false },

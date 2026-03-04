@@ -7,6 +7,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from services.config import get_settings
 from services.db import get_engine
 
+# 직업명 정규화 (dm_rank 등 표기 → 통일 표기, 메타분석 violin/bump 등)
+META_JOB_NAME_NORMALIZE = {"캐논마스터": "캐논슈터"}
+
 
 def _get_table_columns(table_name: str) -> list[str]:
     settings = get_settings()
@@ -113,6 +116,7 @@ def _read_dm_rank_frame(type_filter: str = "전체", limit: int = 50000) -> pd.D
     frame["floor"] = pd.to_numeric(frame["floor"], errors="coerce")
     frame = frame.dropna(subset=["job_name", "floor"])
     frame["job_name"] = frame["job_name"].astype(str)
+    frame["job_name"] = frame["job_name"].replace(META_JOB_NAME_NORMALIZE)
     if "date" in frame.columns:
         frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
     if "version" not in frame.columns:
@@ -194,6 +198,7 @@ def _read_shift_ranks_from_dm(
     if frame.empty:
         return empty, empty, empty_kpi
 
+    frame["job"] = frame["job"].astype(str).replace(META_JOB_NAME_NORMALIZE)
     frame["total_shift"] = pd.to_numeric(frame["total_shift"], errors="coerce")
     frame = frame.dropna(subset=["total_shift"])
     if frame.empty:

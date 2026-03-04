@@ -1,26 +1,31 @@
-app = "maplemeta-web"
-primary_region = "sin"
+# fly.toml app configuration file generated for maplemeta on 2026-03-04T07:21:42+09:00
+#
+# See https://fly.io/docs/reference/configuration/ for information about how to use this file.
+#
+
+app = 'maplemeta'
+primary_region = 'sin'
 
 [build]
+
+[env]
+  APP_NAME = 'Maple Meta Dashboard'
+  PATCH_NOTE_BASE_PATH = ''
+  PGDATABASE = 'postgres'
+  PGHOST = 'db.okjrtyiucbywjhqgvxsd.supabase.co'
+  PGPORT = '5432'
+  PGSCHEMA = 'public'
+  PGUSER = 'postgres'
+  PORT = '8080'
 
 [http_service]
   internal_port = 8080
   force_https = true
-  auto_stop_machines = "stop"
+  auto_stop_machines = 'stop'
   auto_start_machines = true
   min_machines_running = 0
 
 [[vm]]
-  memory = "512mb"
-  cpu_kind = "shared"
+  memory = '512mb'
   cpus = 1
-
-[env]
-  PORT = "8080"
-  PGHOST = "db.okjrtyiucbywjhqgvxsd.supabase.co"
-  PGPORT = "5432"
-  PGDATABASE = "postgres"
-  PGUSER = "postgres"
-  PGSCHEMA = "public"
-  APP_NAME = "Maple Meta Dashboard"
-  PATCH_NOTE_BASE_PATH = ""
+  memory_mb = 512

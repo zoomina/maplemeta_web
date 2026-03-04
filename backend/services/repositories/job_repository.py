@@ -11,6 +11,9 @@ from services.db import get_engine
 
 DEFAULT_TYPE_ORDER = ["전체", "전사", "마법사", "궁수", "도적", "해적"]
 
+# 직업명 정규화: dm_shift_score 등에 있는 표기 → character_master 표기
+JOB_NAME_NORMALIZE = {"캐논마스터": "캐논슈터"}
+
 # Mapping from hyper_master label names to dm_hyper column names
 _HYPER_LABEL_TO_COL: dict[str, str] = {
     "보스 몬스터 데미지": "보공",
@@ -236,6 +239,15 @@ def list_characters(type_filter: str = "전체", keyword: str = "") -> pd.DataFr
     return frame.sort_values(["type", "job"]).reset_index(drop=True)
 
 
+def _shift_score_job_lookup_names(job: str) -> list[str]:
+    """dm_shift_score 조회 시 사용할 job 후보 (캐논슈터 → [캐논슈터, 캐논마스터])."""
+    names = [job]
+    for db_name, display_name in JOB_NAME_NORMALIZE.items():
+        if display_name == job and db_name not in names:
+            names.append(db_name)
+    return names
+
+
 def _get_shift_score_for_job(job: str) -> float | None:
     """dm_shift_score에서 해당 job의 최신 version·segment=50층 shift score 조회."""
     version = _get_latest_version_with_shift_data()
@@ -249,17 +261,23 @@ def _get_shift_score_for_job(job: str) -> float | None:
 
     has_100 = "total_score_100" in cols
     score_col = "total_score_100" if has_100 else "total_shift"
+    job_candidates = _shift_score_job_lookup_names(job)
+    placeholders = ", ".join(f":job_{i}" for i in range(len(job_candidates)))
     query = text(
         f"""
         SELECT "{score_col}"
         FROM "{settings.pg_schema}"."dm_shift_score"
-        WHERE "job" = :job AND "version" = :version AND "segment" = :segment
+        WHERE "job" IN ({placeholders}) AND "version" = :version AND "segment" = :segment
+        ORDER BY "job" = :job_0 DESC
         LIMIT 1
         """
     )
+    params: dict[str, object] = {"version": version, "segment": "50층"}
+    for i, j in enumerate(job_candidates):
+        params[f"job_{i}"] = j
     try:
         with get_engine().connect() as conn:
-            df = pd.read_sql_query(query, conn, params={"job": job, "version": version, "segment": "50층"})
+            df = pd.read_sql_query(query, conn, params=params)
     except SQLAlchemyError:
         return None
     if df.empty or score_col not in df.columns:
@@ -830,11 +848,15 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
 
     has_100 = all(c in cols for c in ["outcome_score_100", "stat_score_100", "build_score_100", "total_score_100"])
     score_col = 's."total_score_100"' if has_100 else 's."total_shift"'
-    select_cols = ['s."job"', 's."segment"', 's."total_shift"']
+    job_normalized_sql = "CASE WHEN s.\"job\" = '캐논마스터' THEN '캐논슈터' ELSE s.\"job\" END"
+    select_cols = [f'{job_normalized_sql} AS "job"', 's."segment"', 's."total_shift"']
     if has_100:
         select_cols.append('s."total_score_100"')
 
-    join_clause = f' JOIN "{settings.pg_schema}"."character_master" c ON s."job" = c."{job_col_cm}"' if job_col_cm else ""
+    join_clause = (
+        f' JOIN "{settings.pg_schema}"."character_master" c ON c."{job_col_cm}" = ({job_normalized_sql})'
+        if job_col_cm else ""
+    )
     where_clause = 's."version" = :version AND s."segment" = :segment'
     params: dict[str, object] = {"version": version, "segment": "50층"}
     if type_filter != "전체" and type_col:
@@ -880,7 +902,7 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
         frame["_score"] = pd.to_numeric(frame["total_score_100"], errors="coerce").fillna(0)
     else:
         frame["_score"] = frame["total_shift"].abs()
-    frame = frame.sort_values("_score", ascending=False).head(max(5, min(top_n, 100)))
+    frame = frame.sort_values("_score", ascending=False).head(max(5, top_n))
     frame = frame.rename(columns={
         "job": "job",
         **({cat_col: "category"} if cat_col and cat_col != "category" else {}),
@@ -896,8 +918,9 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
 
 
 def _build_ranking_panel_frame(type_filter: str, version: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """shift score 기반 전체 캐릭터 순위. version 지정 시 해당 버전 기준 정렬."""
-    ranking = _get_shift_score_ranking(type_filter=type_filter, top_n=25, version=version)
+    """shift score 기반 전체 캐릭터 순위. version 지정 시 해당 버전 기준 정렬. 전체 필터 시 모든 직업 반환."""
+    top_n = 200 if type_filter == "전체" else 25
+    ranking = _get_shift_score_ranking(type_filter=type_filter, top_n=top_n, version=version)
     if ranking.empty:
         return pd.DataFrame(columns=["Rank", "직업", "계열", "type", "주스탯", "50층달성률", "shift score"]), ranking
     ranking = ranking.reset_index(drop=True)
