@@ -13,13 +13,17 @@ function hexToRgba(hex: string, alpha: number): string {
 }
 
 function makeViolinRenderItem(violinData: ViolinJobData[]) {
+  const maxN = Math.max(...violinData.map((d) => d.n || 1));
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return function (params: any, api: any) {
     const job = violinData[params.dataIndex];
     if (!job || job.density.length < 4) return null;
 
     const catX = params.dataIndex;
-    const maxHalfWidth = api.size([0.4, 0])[0] * 0.5;
+    const absoluteMaxHalfWidth = api.size([0.42, 0])[0] * 0.5;
+    // 모수에 비례한 폭 (sqrt로 비율 완화, 최소 20% 보장)
+    const nRatio = Math.max(0.2, Math.sqrt((job.n || 1) / maxN));
+    const maxHalfWidth = absoluteMaxHalfWidth * nRatio;
 
     const leftPts: [number, number][] = [];
     const rightPts: [number, number][] = [];
@@ -71,22 +75,27 @@ export function ViolinChart({ data }: Props) {
     if (job.img) {
       richLabels[`img${idx}`] = {
         backgroundColor: { image: job.img },
-        width: 32,
-        height: 32,
-        borderRadius: 16,
+        width: 36,
+        height: 36,
+        borderRadius: 18,
       };
     }
   });
 
+  // Y축 범위: 데이터 기반 (1~100 사이)
+  const allMins = data.map((d) => d.floor_min ?? 1);
+  const allMaxs = data.map((d) => d.floor_max ?? 100);
+  const yMin = Math.max(1, Math.floor(Math.min(...allMins)) - 2);
+  const yMax = Math.min(100, Math.ceil(Math.max(...allMaxs)) + 2);
+
   const option = {
     backgroundColor: 'transparent',
-    grid: { top: 20, bottom: 100, left: 50, right: 20 },
+    grid: { top: 20, bottom: 110, left: 55, right: 20 },
     xAxis: {
       type: 'category',
       data: jobNames,
       axisLabel: {
         interval: 0,
-        // 이미지 위 + 직업명 아래 (줄바꿈)
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         formatter: (name: string, idx: number) => {
           const job = data[idx];
@@ -101,12 +110,12 @@ export function ViolinChart({ data }: Props) {
           ...Object.fromEntries(
             data.map((job, idx) => [
               `name${idx}`,
-              { color: '#94A3B8', fontSize: 10, align: 'center' },
+              { color: '#94A3B8', fontSize: 11, align: 'center' },
             ])
           ),
         },
         color: '#94A3B8',
-        fontSize: 11,
+        fontSize: 12,
       },
       axisLine: { lineStyle: { color: '#2A2D3E' } },
       axisTick: { show: false },
@@ -115,18 +124,18 @@ export function ViolinChart({ data }: Props) {
     yAxis: {
       type: 'value',
       name: '층수',
-      min: 1,
-      max: 100,
-      nameTextStyle: { color: '#94A3B8', fontSize: 11 },
+      min: yMin,
+      max: yMax,
+      nameTextStyle: { color: '#94A3B8', fontSize: 12 },
       splitLine: { lineStyle: { color: '#2A2D3E', type: 'dashed' as const } },
       axisLine: { show: false },
-      axisLabel: { color: '#94A3B8', fontSize: 11 },
+      axisLabel: { color: '#94A3B8', fontSize: 12 },
     },
     tooltip: {
       trigger: 'item',
       backgroundColor: '#1A1D2E',
       borderColor: '#2A2D3E',
-      textStyle: { color: '#F1F5F9', fontSize: 12 },
+      textStyle: { color: '#F1F5F9', fontSize: 13 },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       formatter: (params: any) => {
         const job = data[params.dataIndex];
@@ -152,5 +161,5 @@ export function ViolinChart({ data }: Props) {
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 380 }} notMerge />;
+  return <ReactECharts option={option} style={{ height: 400 }} notMerge />;
 }

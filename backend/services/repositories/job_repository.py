@@ -854,7 +854,7 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
         select_cols.append('s."total_score_100"')
 
     join_clause = (
-        f' JOIN "{settings.pg_schema}"."character_master" c ON c."{job_col_cm}" = ({job_normalized_sql})'
+        f' LEFT JOIN "{settings.pg_schema}"."character_master" c ON c."{job_col_cm}" = ({job_normalized_sql})'
         if job_col_cm else ""
     )
     where_clause = 's."version" = :version AND s."segment" = :segment'

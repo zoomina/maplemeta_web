@@ -1,4 +1,5 @@
 import ReactECharts from 'echarts-for-react';
+import { useEffect, useRef, useState } from 'react';
 import { BumpPoint } from '../../types';
 
 interface Props {
@@ -7,8 +8,67 @@ interface Props {
   xaxisRange?: [string, string] | null;
 }
 
+/** canvas로 원형 클리핑된 이미지 + 색상 아웃라인 Data URI 생성 */
+function makeCircularImageDataUrl(imgUrl: string, color: string, size = 52): Promise<string> {
+  return new Promise((resolve) => {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) { resolve(''); return; }
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const border = 3;
+      const r = size / 2;
+      // 배경 원 (테두리 색)
+      ctx.beginPath();
+      ctx.arc(r, r, r, 0, Math.PI * 2);
+      ctx.fillStyle = color || '#6366f1';
+      ctx.fill();
+      // 이미지를 원형 클리핑
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(r, r, r - border, 0, Math.PI * 2);
+      ctx.clip();
+      ctx.drawImage(img, 0, 0, size, size);
+      ctx.restore();
+      resolve(canvas.toDataURL());
+    };
+    img.onerror = () => resolve('');
+    img.src = imgUrl;
+  });
+}
+
 export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
+  const circularImgsRef = useRef<Record<string, string>>({});
+  const [imgsReady, setImgsReady] = useState(false);
+
+  useEffect(() => {
+    if (!data.length) return;
+    const jobMap = new Map<string, { img: string; color: string }>();
+    for (const pt of data) {
+      if (!jobMap.has(pt.job_name)) jobMap.set(pt.job_name, { img: pt.img, color: pt.color });
+    }
+    const jobs = Array.from(jobMap.entries()).filter(([, s]) => s.img);
+    if (!jobs.length) { setImgsReady(true); return; }
+
+    Promise.all(
+      jobs.map(([jobName, style]) =>
+        makeCircularImageDataUrl(style.img, style.color).then((url) => ({ jobName, url }))
+      )
+    ).then((results) => {
+      const map: Record<string, string> = {};
+      for (const { jobName, url } of results) {
+        if (url) map[jobName] = url;
+      }
+      circularImgsRef.current = map;
+      setImgsReady(true);
+    });
+  }, [data]);
+
   if (!data.length) return <p className="text-[#64748B] text-sm py-4 text-center">데이터 없음</p>;
+  if (!imgsReady) return null;
 
   const jobMap = new Map<string, { img: string; color: string }>();
   for (const pt of data) {
@@ -16,6 +76,7 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
   }
 
   const maxRank = Math.max(...data.map((d) => d.rank));
+  const circularImgs = circularImgsRef.current;
 
   const series = Array.from(jobMap.entries()).map(([jobName, style]) => {
     const pts = data
@@ -23,24 +84,22 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
       .sort((a, b) => a.date.localeCompare(b.date));
 
     const lineColor = style.color || '#6366f1';
+    const circularSrc = circularImgs[jobName];
 
     const seriesData = pts.map((p, idx) => {
       const isEdge = idx === 0 || idx === pts.length - 1;
-      if (isEdge && style.img) {
+      if (isEdge && circularSrc) {
         return {
           value: [p.date, p.rank],
-          symbol: `image://${style.img}`,
-          symbolSize: 26,
-          itemStyle: {
-            borderColor: lineColor,
-            borderWidth: 2,
-          },
+          symbol: `image://${circularSrc}`,
+          symbolSize: 36,
+          itemStyle: { borderColor: 'transparent', borderWidth: 0 },
         };
       }
       return {
         value: [p.date, p.rank],
         symbol: 'circle',
-        symbolSize: 12,
+        symbolSize: 10,
         itemStyle: {
           color: '#0F1117',
           borderColor: lineColor,
@@ -63,9 +122,7 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
         formatter: (params: any) => {
           const raw = Array.isArray(params.data) ? params.data : params.data?.value;
           const date = Array.isArray(raw) ? raw[0] : undefined;
-          const pt = data.find(
-            (d) => d.job_name === jobName && d.date === date
-          );
+          const pt = data.find((d) => d.job_name === jobName && d.date === date);
           if (!pt) return jobName;
           const imgHtml = pt.img
             ? `<img src="${pt.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;margin-right:6px;border:2px solid ${pt.color};" />`
@@ -88,10 +145,10 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
 
   const option = {
     backgroundColor: 'transparent',
-    grid: { top: 20, bottom: 50, left: 50, right: 20 },
+    grid: { top: 20, bottom: 50, left: 55, right: 20 },
     xAxis: {
       type: 'time',
-      axisLabel: { color: '#94A3B8', fontSize: 10 },
+      axisLabel: { color: '#94A3B8', fontSize: 11 },
       axisLine: { lineStyle: { color: '#2A2D3E' } },
       splitLine: { show: false },
       ...(xaxisRange ? { min: xaxisRange[0], max: xaxisRange[1] } : {}),
@@ -100,33 +157,27 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
       type: 'value',
       inverse: true,
       name: '순위',
-      nameTextStyle: { color: '#94A3B8', fontSize: 11 },
+      nameTextStyle: { color: '#94A3B8', fontSize: 12 },
       min: 1,
       max: Math.min(maxRank, 15),
       interval: 1,
       splitLine: { lineStyle: { color: '#2A2D3E', type: 'dashed' as const } },
       axisLine: { show: false },
-      axisLabel: { color: '#94A3B8', fontSize: 11, formatter: '{value}위' },
+      axisLabel: { color: '#94A3B8', fontSize: 12, formatter: '{value}위' },
     },
     tooltip: {
       trigger: 'item',
       backgroundColor: '#1A1D2E',
       borderColor: '#2A2D3E',
-      textStyle: { color: '#F1F5F9', fontSize: 12 },
+      textStyle: { color: '#F1F5F9', fontSize: 13 },
     },
     series: [
       ...series,
-      ...(markLineData.length > 0 ? [{
-        type: 'line',
-        data: [],
-        markLine: {
-          silent: true,
-          symbol: 'none',
-          data: markLineData,
-        },
-      }] : []),
+      ...(markLineData.length > 0
+        ? [{ type: 'line', data: [], markLine: { silent: true, symbol: 'none', data: markLineData } }]
+        : []),
     ],
   };
 
-  return <ReactECharts option={option} style={{ height: 400 }} notMerge />;
+  return <ReactECharts option={option} style={{ height: 420 }} notMerge />;
 }

@@ -119,8 +119,8 @@ export function MetaPage() {
 
           {/* Shift Rank 테이블 */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <ShiftRankTable title="직업별 shift 랭크 (50층 세그먼트)" data={data.shift_rank_50} />
-            <ShiftRankTable title="직업별 shift 랭크 (상위권 세그먼트)" data={data.shift_rank_upper} />
+            <ShiftRankTable title="직업별 shift 랭크 (50층 세그먼트)" data={data.shift_rank_50.slice(0, 5)} />
+            <ShiftRankTable title="직업별 shift 랭크 (상위권 세그먼트)" data={data.shift_rank_upper.slice(0, 5)} />
           </div>
         </>
       )}
