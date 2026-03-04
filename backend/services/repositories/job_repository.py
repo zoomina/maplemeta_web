@@ -359,6 +359,43 @@ def get_floor50_ranking(type_filter: str = "전체", top_n: int = 30) -> pd.Data
     return payload.reset_index(drop=True)
 
 
+
+def _batch_floor50_rate(jobs: list[str], version: str | None = None) -> dict[str, float]:
+    """여러 직업의 floor50_rate를 한 번의 쿼리로 가져오기."""
+    if not jobs:
+        return {}
+    settings = get_settings()
+    cols = _get_table_columns("dm_rank")
+    if not cols:
+        return {}
+    job_col = _pick_column(cols, ["job", "job_name", "class_name"])
+    floor_col = _pick_column(cols, ["floor", "max_floor"])
+    version_col = _pick_column(cols, ["version"])
+    if not job_col or not floor_col:
+        return {}
+    placeholders = ", ".join([f":job_{i}" for i in range(len(jobs))])
+    params: dict[str, object] = {f"job_{i}": j for i, j in enumerate(jobs)}
+    version_cond = ""
+    if version and version_col:
+        version_cond = f' AND "{version_col}" = :version_val'
+        params["version_val"] = version
+    query = text(
+        f'''SELECT "{job_col}" AS job,
+               AVG(CASE WHEN "{floor_col}" >= 50 THEN 1.0 ELSE 0.0 END) AS floor50_rate
+        FROM "{settings.pg_schema}"."dm_rank"
+        WHERE "{job_col}" IN ({placeholders}){version_cond}
+        GROUP BY "{job_col}"'''
+    )
+    try:
+        with get_engine().connect() as conn:
+            df = pd.read_sql_query(query, conn, params=params)
+        if df.empty:
+            return {}
+        return {str(row["job"]): float(row["floor50_rate"] or 0.0) for _, row in df.iterrows()}
+    except SQLAlchemyError:
+        return {}
+
+
 def _estimate_floor50_rate(job: str) -> float:
     settings = get_settings()
     cols = _get_table_columns("dm_rank")
@@ -913,7 +950,9 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
         if c not in frame.columns:
             frame[c] = "-"
     frame["shift_score"] = frame["_score"]
-    frame["floor50_rate"] = frame["job"].apply(lambda j: _estimate_floor50_rate(job=str(j)))
+    jobs_list = frame["job"].tolist()
+    floor50_map = _batch_floor50_rate(jobs_list, version=version)
+    frame["floor50_rate"] = frame["job"].apply(lambda j: floor50_map.get(str(j), 0.0))
     return frame[["job", "type", "category", "main_stat", "shift_score", "floor50_rate"]].reset_index(drop=True)
 
 

@@ -8,7 +8,6 @@ interface Props {
   xaxisRange?: [string, string] | null;
 }
 
-/** canvas로 원형 클리핑된 이미지 + 색상 아웃라인 Data URI 생성 */
 function makeCircularImageDataUrl(imgUrl: string, color: string, size = 52): Promise<string> {
   return new Promise((resolve) => {
     const canvas = document.createElement('canvas');
@@ -19,21 +18,23 @@ function makeCircularImageDataUrl(imgUrl: string, color: string, size = 52): Pro
     const img = new Image();
     img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const border = 3;
-      const r = size / 2;
-      // 배경 원 (테두리 색)
-      ctx.beginPath();
-      ctx.arc(r, r, r, 0, Math.PI * 2);
-      ctx.fillStyle = color || '#6366f1';
-      ctx.fill();
-      // 이미지를 원형 클리핑
-      ctx.save();
-      ctx.beginPath();
-      ctx.arc(r, r, r - border, 0, Math.PI * 2);
-      ctx.clip();
-      ctx.drawImage(img, 0, 0, size, size);
-      ctx.restore();
-      resolve(canvas.toDataURL());
+      try {
+        const border = 3;
+        const r = size / 2;
+        ctx.beginPath();
+        ctx.arc(r, r, r, 0, Math.PI * 2);
+        ctx.fillStyle = color || '#6366f1';
+        ctx.fill();
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(r, r, r - border, 0, Math.PI * 2);
+        ctx.clip();
+        ctx.drawImage(img, 0, 0, size, size);
+        ctx.restore();
+        resolve(canvas.toDataURL());
+      } catch {
+        resolve('');
+      }
     };
     img.onerror = () => resolve('');
     img.src = imgUrl;
@@ -42,7 +43,7 @@ function makeCircularImageDataUrl(imgUrl: string, color: string, size = 52): Pro
 
 export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
   const circularImgsRef = useRef<Record<string, string>>({});
-  const [imgsReady, setImgsReady] = useState(false);
+  const [, setImgsReady] = useState(false);
 
   useEffect(() => {
     if (!data.length) return;
@@ -68,7 +69,6 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
   }, [data]);
 
   if (!data.length) return <p className="text-[#64748B] text-sm py-4 text-center">데이터 없음</p>;
-  if (!imgsReady) return null;
 
   const jobMap = new Map<string, { img: string; color: string }>();
   for (const pt of data) {
@@ -88,12 +88,16 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
 
     const seriesData = pts.map((p, idx) => {
       const isEdge = idx === 0 || idx === pts.length - 1;
-      if (isEdge && circularSrc) {
+      if (isEdge) {
+        // 원형 이미지 준비되면 사용, 없으면 색상 circle로 fallback
+        const sym = circularSrc ? `image://${circularSrc}` : 'circle';
         return {
           value: [p.date, p.rank],
-          symbol: `image://${circularSrc}`,
-          symbolSize: 36,
-          itemStyle: { borderColor: 'transparent', borderWidth: 0 },
+          symbol: sym,
+          symbolSize: circularSrc ? 36 : 14,
+          itemStyle: circularSrc
+            ? { borderColor: 'transparent', borderWidth: 0 }
+            : { color: lineColor, borderColor: '#0F1117', borderWidth: 2 },
         };
       }
       return {

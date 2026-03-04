@@ -23,9 +23,8 @@ def _kde_violin(values: List[float], n_points: int = 60) -> List[List[float]]:
     arr = np.array(values, dtype=float)
     bw = max(1.06 * float(np.std(arr)) * len(arr) ** (-0.2), 0.5)
     y_min, y_max = float(arr.min()), float(arr.max())
-    # 데이터는 1~100층 범위이므로, KDE 축도 1~100 안에서만 계산
-    lower = max(1.0, y_min)
-    upper = min(100.0, y_max)
+    lower = y_min
+    upper = y_max
     if upper <= lower:
         upper = lower + 1.0
     y_grid = np.linspace(lower, upper, n_points)

@@ -42,7 +42,7 @@ def _pick_column(columns: list[str], candidates: list[str]) -> str | None:
     return None
 
 
-def _read_dm_rank_frame(type_filter: str = "전체", limit: int = 50000) -> pd.DataFrame:
+def _read_dm_rank_frame(type_filter: str = "전체", limit: int = 50000, version: str | None = None) -> pd.DataFrame:
     """Read dm_rank filtered by type. Returns normalized DataFrame."""
     settings = get_settings()
     columns = _get_table_columns("dm_rank")
@@ -83,6 +83,13 @@ def _read_dm_rank_frame(type_filter: str = "전체", limit: int = 50000) -> pd.D
         else:
             type_filter_sql = f' WHERE "{type_col}" = :type_value'
             params["type_value"] = type_filter
+
+    if version and version_col and version_col in selected:
+        if type_filter_sql:
+            type_filter_sql += f' AND "{version_col}" = :version_value'
+        else:
+            type_filter_sql = f' WHERE "{version_col}" = :version_value'
+        params["version_value"] = version
 
     query = text(
         f'SELECT {select_clause} FROM "{settings.pg_schema}"."dm_rank"{type_filter_sql} LIMIT :limit_value'
@@ -417,7 +424,8 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         "selected_version": version or "",
     }
 
-    all_work = _read_dm_rank_frame(type_filter=type_filter, limit=50000)
+    # bump chart용: 전체 기간 (버전 무관), 경량화 limit
+    all_work = _read_dm_rank_frame(type_filter=type_filter, limit=100000)
     if all_work.empty:
         return empty_payload
 
@@ -431,7 +439,13 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         version = versions[0] if versions else ""
     version = str(version).strip() if version else ""
 
-    work = all_work[all_work["version"] == version].copy() if version else all_work.copy()
+    # violin/ter용: 해당 버전 데이터만 DB에서 직접 조회
+    if version:
+        work = _read_dm_rank_frame(type_filter=type_filter, version=version, limit=30000)
+        if work.empty:
+            work = all_work[all_work["version"] == version].copy()
+    else:
+        work = all_work.copy()
     if work.empty:
         work = all_work.copy()
 

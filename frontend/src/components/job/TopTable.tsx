@@ -19,7 +19,7 @@ function renderCell(key: string, row: Record<string, unknown>): React.ReactNode 
     const d = delta != null && delta !== '-' ? Number(delta) : null;
     const color = getDeltaColor(d);
     const sign = d != null && d > 0 ? '+' : '';
-    const deltaStr = d != null && !isNaN(d) ? `(${sign}${d})` : '';
+    const deltaStr = d != null && !isNaN(d) && d !== 0 ? `(${sign}${d})` : '';
     return (
       <span>
         <span className="text-[#FF8C00] font-semibold">{String(curr ?? '-')}</span>
@@ -36,7 +36,7 @@ function renderCell(key: string, row: Record<string, unknown>): React.ReactNode 
     const d = delta != null && delta !== '-' ? Number(delta) : null;
     const color = getDeltaColor(d);
     const sign = d != null && d > 0 ? '+' : '';
-    const deltaStr = d != null && !isNaN(d) ? `(${sign}${d.toFixed(2)}%p)` : '';
+    const deltaStr = d != null && !isNaN(d) && d !== 0 ? `(${sign}${d.toFixed(2)}%p)` : '';
     return (
       <span>
         <span>{share != null ? `${share}%` : '-'}</span>
