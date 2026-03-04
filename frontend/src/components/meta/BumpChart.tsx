@@ -22,31 +22,61 @@ export function BumpChart({ data, versionChanges, xaxisRange }: Props) {
       .filter((d) => d.job_name === jobName)
       .sort((a, b) => a.date.localeCompare(b.date));
 
+    const lineColor = style.color || '#6366f1';
+
+    const seriesData = pts.map((p, idx) => {
+      const isEdge = idx === 0 || idx === pts.length - 1;
+      if (isEdge && style.img) {
+        return {
+          value: [p.date, p.rank],
+          symbol: `image://${style.img}`,
+          symbolSize: 26,
+          itemStyle: {
+            borderColor: lineColor,
+            borderWidth: 2,
+          },
+        };
+      }
+      return {
+        value: [p.date, p.rank],
+        symbol: 'circle',
+        symbolSize: 12,
+        itemStyle: {
+          color: '#0F1117',
+          borderColor: lineColor,
+          borderWidth: 2,
+        },
+      };
+    });
+
     return {
       name: jobName,
       type: 'line',
       smooth: false,
-      data: pts.map((p) => [p.date, p.rank]),
-      lineStyle: { color: style.color || '#6366f1', width: 2.5 },
-      itemStyle: { color: style.color || '#6366f1' },
-      symbol: style.img ? `image://${style.img}` : 'circle',
-      symbolSize: 26,
+      data: seriesData,
+      lineStyle: { color: lineColor, width: 2.5 },
+      itemStyle: { color: lineColor },
+      symbol: 'circle',
       emphasis: { scale: 1.3 },
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      tooltip: { formatter: (params: any) => {
-        const pt = data.find(
-          (d) => d.job_name === jobName && d.date === params.data[0]
-        );
-        if (!pt) return jobName;
-        const imgHtml = pt.img
-          ? `<img src="${pt.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;margin-right:6px;border:2px solid ${pt.color};" />`
-          : '';
-        return `<div style="display:flex;align-items:center;margin-bottom:4px">${imgHtml}<strong style="color:${pt.color}">${pt.job_name}</strong></div>
+      tooltip: {
+        formatter: (params: any) => {
+          const raw = Array.isArray(params.data) ? params.data : params.data?.value;
+          const date = Array.isArray(raw) ? raw[0] : undefined;
+          const pt = data.find(
+            (d) => d.job_name === jobName && d.date === date
+          );
+          if (!pt) return jobName;
+          const imgHtml = pt.img
+            ? `<img src="${pt.img}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;margin-right:6px;border:2px solid ${pt.color};" />`
+            : '';
+          return `<div style="display:flex;align-items:center;margin-bottom:4px">${imgHtml}<strong style="color:${pt.color}">${pt.job_name}</strong></div>
           ${pt.date}<br/>
           순위 <strong>${pt.rank}위</strong><br/>
           달성률 ${((pt.rate || 0) * 100).toFixed(1)}% (${pt.rate_delta_str})<br/>
           <span style="color:#64748B">${pt.achieved.toLocaleString()}명 / ${pt.total.toLocaleString()}명</span>`;
-      }},
+        },
+      },
     };
   });
 
