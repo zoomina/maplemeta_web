@@ -976,9 +976,10 @@ def _build_ranking_panel_frame(type_filter: str, version: str | None = None) -> 
 
     shift_display = ranking["shift_score"].apply(_fmt_shift)
     # 데이터 없는 직업은 Rank 표시 안 함
+    has_data_sorted = ranking["shift_score"].notna()
     ranks = []
     r = 1
-    for has in has_data_sorted := ranking["shift_score"].notna():
+    for has in has_data_sorted:
         if has:
             ranks.append(str(r))
             r += 1
