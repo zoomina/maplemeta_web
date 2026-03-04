@@ -130,8 +130,8 @@ def job_stats(
 
 
 @router.get("/{job}", response_model=None)
-def job_detail(job: str) -> Dict[str, Any]:
-    detail = get_character_detail(job)
+def job_detail(job: str, version: str = Query("")) -> Dict[str, Any]:
+    detail = get_character_detail(job, version=version.strip() or None)
     if not detail or not detail.get("job"):
         raise HTTPException(status_code=404, detail="Job '{}' not found".format(job))
 

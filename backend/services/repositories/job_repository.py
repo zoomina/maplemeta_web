@@ -248,9 +248,10 @@ def _shift_score_job_lookup_names(job: str) -> list[str]:
     return names
 
 
-def _get_shift_score_for_job(job: str) -> float | None:
-    """dm_shift_score에서 해당 job의 최신 version·segment=50층 shift score 조회."""
-    version = _get_latest_version_with_shift_data()
+def _get_shift_score_for_job(job: str, version: str | None = None) -> float | None:
+    """dm_shift_score에서 해당 job의 지정 version·segment=50층 shift score 조회."""
+    if not version:
+        version = _get_latest_version_with_shift_data()
     if not version:
         return None
 
@@ -288,7 +289,7 @@ def _get_shift_score_for_job(job: str) -> float | None:
     return float(val)
 
 
-def get_character_detail(job: str) -> dict:
+def get_character_detail(job: str, version: str | None = None) -> dict:
     chars = list_characters(type_filter="전체", keyword="")
     target = chars[chars["job"] == job]
     if target.empty:
@@ -299,7 +300,7 @@ def get_character_detail(job: str) -> dict:
             "main_stat": "-",
             "description": "",
             "floor50_rate": 0.0,
-            "shift_score": _get_shift_score_for_job(job),
+            "shift_score": _get_shift_score_for_job(job, version=version),
             "img": "",
             "img_full": "",
             "img_full_resolved": None,
@@ -322,7 +323,7 @@ def get_character_detail(job: str) -> dict:
         "main_stat": row.get("main_stat", "-"),
         "description": row.get("description", ""),
         "floor50_rate": _estimate_floor50_rate(job=row.get("job", "")),
-        "shift_score": _get_shift_score_for_job(row.get("job", "")),
+        "shift_score": _get_shift_score_for_job(row.get("job", ""), version=version),
         "img": row.get("img", ""),
         "img_full": img_full_raw,
         "img_full_resolved": resolved,
@@ -866,119 +867,132 @@ def _get_latest_version_with_shift_data() -> str:
 
 
 def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | None = None) -> pd.DataFrame:
-    """dm_shift_score 기반 랭킹 (지정 version 또는 최신, segment=50층). shift score 내림차순."""
+    """character_master 전체 직업 기준 랭킹. dm_shift_score 데이터 없는 직업은 shift_score=None으로 포함."""
     if not version:
         version = _get_latest_version_with_shift_data()
-    if not version:
-        return pd.DataFrame(columns=["job", "type", "category", "main_stat", "shift_score", "floor50_rate"])
 
     settings = get_settings()
-    cols = _get_table_columns("dm_shift_score")
-    if not cols or "version" not in cols or "job" not in cols or "segment" not in cols or "total_shift" not in cols:
+    cm_cols = _get_table_columns("character_master")
+    if not cm_cols:
         return pd.DataFrame(columns=["job", "type", "category", "main_stat", "shift_score", "floor50_rate"])
 
-    cm_cols = _get_table_columns("character_master")
-    type_col = _pick_column(cm_cols, ["type", "job_type"]) if cm_cols else None
+    type_col = _pick_column(cm_cols, ["type", "job_type"])
     job_col_cm = _pick_column(cm_cols, ["job", "job_name"])
     cat_col = _pick_column(cm_cols, ["category", "group"])
     main_col = _pick_column(cm_cols, ["main_stat", "main_status"])
+    if not job_col_cm:
+        return pd.DataFrame(columns=["job", "type", "category", "main_stat", "shift_score", "floor50_rate"])
 
-    has_100 = all(c in cols for c in ["outcome_score_100", "stat_score_100", "build_score_100", "total_score_100"])
-    score_col = 's."total_score_100"' if has_100 else 's."total_shift"'
-    job_normalized_sql = "CASE WHEN s.\"job\" = '캐논마스터' THEN '캐논슈터' ELSE s.\"job\" END"
-    select_cols = [f'{job_normalized_sql} AS "job"', 's."segment"', 's."total_shift"']
-    if has_100:
-        select_cols.append('s."total_score_100"')
-
-    join_clause = (
-        f' LEFT JOIN "{settings.pg_schema}"."character_master" c ON c."{job_col_cm}" = ({job_normalized_sql})'
-        if job_col_cm else ""
-    )
-    where_clause = 's."version" = :version AND s."segment" = :segment'
-    params: dict[str, object] = {"version": version, "segment": "50층"}
+    # character_master 기반 직업 목록 조회
+    cm_select = [f'c."{job_col_cm}" AS "job"']
+    if cat_col:
+        cm_select.append(f'c."{cat_col}" AS "category"')
+    if type_col:
+        cm_select.append(f'c."{type_col}" AS "type"')
+    if main_col:
+        cm_select.append(f'c."{main_col}" AS "main_stat"')
+    cm_where = ""
+    cm_params: dict[str, object] = {}
     if type_filter != "전체" and type_col:
         if type_filter == "도적":
-            where_clause += f' AND (c."{type_col}" = :type_value OR c."{type_col}" = :type_dual)'
-            params["type_value"] = "도적"
-            params["type_dual"] = "도적/해적"
+            cm_where = f' WHERE (c."{type_col}" = :type_value OR c."{type_col}" = :type_dual)'
+            cm_params["type_value"] = "도적"
+            cm_params["type_dual"] = "도적/해적"
         elif type_filter == "해적":
-            where_clause += f' AND (c."{type_col}" = :type_value OR c."{type_col}" = :type_dual)'
-            params["type_value"] = "해적"
-            params["type_dual"] = "도적/해적"
+            cm_where = f' WHERE (c."{type_col}" = :type_value OR c."{type_col}" = :type_dual)'
+            cm_params["type_value"] = "해적"
+            cm_params["type_dual"] = "도적/해적"
         else:
-            where_clause += f' AND c."{type_col}" = :type_value'
-            params["type_value"] = type_filter
+            cm_where = f' WHERE c."{type_col}" = :type_value'
+            cm_params["type_value"] = type_filter
 
-    select_clause = ", ".join(select_cols)
-    if cat_col:
-        select_clause += f', c."{cat_col}"'
-    if type_col:
-        select_clause += f', c."{type_col}"'
-    if main_col:
-        select_clause += f', c."{main_col}"'
-
-    query = text(
-        f"""
-        SELECT {select_clause}
-        FROM "{settings.pg_schema}"."dm_shift_score" s
-        {join_clause}
-        WHERE {where_clause}
-        """
-    )
     try:
         with get_engine().connect() as conn:
-            frame = pd.read_sql_query(query, conn, params=params)
+            cm_frame = pd.read_sql_query(
+                text(f'SELECT {", ".join(cm_select)} FROM "{settings.pg_schema}"."character_master" c{cm_where}'),
+                conn, params=cm_params,
+            )
     except SQLAlchemyError:
         return pd.DataFrame(columns=["job", "type", "category", "main_stat", "shift_score", "floor50_rate"])
 
-    if frame.empty:
+    if cm_frame.empty:
         return pd.DataFrame(columns=["job", "type", "category", "main_stat", "shift_score", "floor50_rate"])
 
-    frame["total_shift"] = pd.to_numeric(frame["total_shift"], errors="coerce")
-    if has_100 and "total_score_100" in frame.columns:
-        frame["_score"] = pd.to_numeric(frame["total_score_100"], errors="coerce").fillna(0)
-    else:
-        frame["_score"] = frame["total_shift"].abs()
-    frame = frame.sort_values("_score", ascending=False).head(max(5, top_n))
-    frame = frame.rename(columns={
-        "job": "job",
-        **({cat_col: "category"} if cat_col and cat_col != "category" else {}),
-        **({type_col: "type"} if type_col and type_col != "type" else {}),
-        **({main_col: "main_stat"} if main_col and main_col != "main_stat" else {}),
-    })
+    # 직업명 정규화 (캐논마스터 → 캐논슈터)
+    cm_frame["job"] = cm_frame["job"].astype(str).replace(JOB_NAME_NORMALIZE)
+    cm_frame = cm_frame.drop_duplicates(subset=["job"]).reset_index(drop=True)
     for c in ["category", "type", "main_stat"]:
-        if c not in frame.columns:
-            frame[c] = "-"
-    frame["shift_score"] = frame["_score"]
-    jobs_list = frame["job"].tolist()
-    floor50_map = _batch_floor50_rate(jobs_list, version=version)
-    frame["floor50_rate"] = frame["job"].apply(lambda j: floor50_map.get(str(j), 0.0))
-    return frame[["job", "type", "category", "main_stat", "shift_score", "floor50_rate"]].reset_index(drop=True)
+        if c not in cm_frame.columns:
+            cm_frame[c] = "-"
+
+    # dm_shift_score에서 해당 버전·50층 점수 조회
+    ss_cols = _get_table_columns("dm_shift_score")
+    score_map: dict[str, float] = {}
+    if version and ss_cols and all(k in ss_cols for k in ["version", "job", "segment", "total_shift"]):
+        has_100 = "total_score_100" in ss_cols
+        score_col_name = "total_score_100" if has_100 else "total_shift"
+        job_normalized_sql = "CASE WHEN \"job\" = '캐논마스터' THEN '캐논슈터' ELSE \"job\" END"
+        try:
+            with get_engine().connect() as conn:
+                ss_frame = pd.read_sql_query(
+                    text(
+                        f'SELECT {job_normalized_sql} AS "job", "{score_col_name}" AS "score" '
+                        f'FROM "{settings.pg_schema}"."dm_shift_score" '
+                        f'WHERE "version" = :version AND "segment" = :segment'
+                    ),
+                    conn, params={"version": version, "segment": "50층"},
+                )
+        except SQLAlchemyError:
+            ss_frame = pd.DataFrame()
+        if not ss_frame.empty:
+            ss_frame["score"] = pd.to_numeric(ss_frame["score"], errors="coerce")
+            score_map = {str(r["job"]): float(r["score"]) for _, r in ss_frame.iterrows() if pd.notna(r["score"])}
+
+    cm_frame["shift_score"] = cm_frame["job"].apply(lambda j: score_map.get(str(j)))
+    jobs_list = cm_frame["job"].tolist()
+    floor50_map = _batch_floor50_rate(jobs_list, version=version) if version else {}
+    cm_frame["floor50_rate"] = cm_frame["job"].apply(lambda j: floor50_map.get(str(j), 0.0))
+    return cm_frame[["job", "type", "category", "main_stat", "shift_score", "floor50_rate"]].reset_index(drop=True)
 
 
 def _build_ranking_panel_frame(type_filter: str, version: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
-    """shift score 기반 전체 캐릭터 순위. version 지정 시 해당 버전 기준 정렬. 전체 필터 시 모든 직업 반환."""
-    top_n = 200 if type_filter == "전체" else 25
-    ranking = _get_shift_score_ranking(type_filter=type_filter, top_n=top_n, version=version)
+    """shift score 기반 전체 캐릭터 순위. 데이터 없는 직업은 최하단에 표시."""
+    ranking = _get_shift_score_ranking(type_filter=type_filter, version=version)
     if ranking.empty:
         return pd.DataFrame(columns=["Rank", "직업", "계열", "type", "주스탯", "50층달성률", "shift score"]), ranking
-    ranking = ranking.reset_index(drop=True)
+
+    # 데이터 있는 직업: score 내림차순 / 없는 직업: 최하단
+    has_data = ranking["shift_score"].notna()
+    ranked = ranking[has_data].sort_values("shift_score", ascending=False).reset_index(drop=True)
+    no_data = ranking[~has_data].reset_index(drop=True)
+    ranking = pd.concat([ranked, no_data], ignore_index=True)
+
     def _fmt_shift(x):
         if x is None or (isinstance(x, float) and pd.isna(x)):
-            return "-"
+            return "데이터 없음"
         if isinstance(x, (int, float)) and 0 <= x <= 100 and x == int(x):
             return f"{int(x)}"
-        return f"{float(x):.3f}" if isinstance(x, (int, float)) else "-"
+        return f"{float(x):.3f}" if isinstance(x, (int, float)) else "데이터 없음"
 
     shift_display = ranking["shift_score"].apply(_fmt_shift)
+    # 데이터 없는 직업은 Rank 표시 안 함
+    ranks = []
+    r = 1
+    for has in has_data_sorted := ranking["shift_score"].notna():
+        if has:
+            ranks.append(str(r))
+            r += 1
+        else:
+            ranks.append("-")
+
     panel = pd.DataFrame(
         {
-            "Rank": ranking.index + 1,
+            "Rank": ranks,
             "직업": ranking["job"],
-            "계열": ranking.get("category", "-"),
+            "계열": ranking.get("category", pd.Series(["-"] * len(ranking))),
             "type": ranking["type"],
-            "주스탯": ranking.get("main_stat", "-"),
-            "50층달성률": (ranking["floor50_rate"] * 100).round(2).astype(str) + "%",
+            "주스탯": ranking.get("main_stat", pd.Series(["-"] * len(ranking))),
+            "50층달성률": ranking["floor50_rate"].apply(lambda x: f"{x*100:.2f}%" if pd.notna(x) else "-"),
             "shift score": shift_display,
         }
     )

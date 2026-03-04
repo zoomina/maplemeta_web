@@ -27,7 +27,7 @@ export function JobPage() {
 
   const jobListUrl = `/api/job/list?type=${encodeURIComponent(selectedType)}&keyword=${encodeURIComponent(keyword)}`;
   const rankingUrl = selectedVersion ? `/api/job/ranking?type=${encodeURIComponent(selectedType)}&version=${encodeURIComponent(selectedVersion)}` : null;
-  const detailUrl = selectedJob ? `/api/job/${encodeURIComponent(selectedJob)}` : null;
+  const detailUrl = selectedJob ? `/api/job/${encodeURIComponent(selectedJob)}?version=${encodeURIComponent(selectedVersion)}` : null;
   const statsUrl = selectedJob
     ? `/api/job/${encodeURIComponent(selectedJob)}/stats?segment=${encodeURIComponent(segment)}&version=${encodeURIComponent(selectedVersion)}`
     : null;
