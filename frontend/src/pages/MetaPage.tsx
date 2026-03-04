@@ -97,7 +97,7 @@ export function MetaPage() {
           {/* 직업별 층수 분포 */}
           <div className="card">
             <h3 className="text-sm font-bold text-[#F1F5F9] mb-4">직업별 층수 분포 (Top10)</h3>
-            <ViolinChart data={data.violin.slice(0, 10)} />
+            <ViolinChart data={data.violin} />
           </div>
 
           {/* TER 분포 */}

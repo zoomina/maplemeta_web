@@ -91,7 +91,14 @@ def meta_overview(
 
     violin_out: List[Dict] = []
     if not violin_df.empty and "job_name" in violin_df.columns and "floor" in violin_df.columns:
-        for job_name, grp in violin_df.groupby("job_name"):
+        job_order = (
+            violin_df.groupby("job_name")["floor"].count()
+            .sort_values(ascending=False)
+            .head(10)
+            .index.tolist()
+        )
+        for job_name in job_order:
+            grp = violin_df[violin_df["job_name"] == job_name]
             jn = str(job_name)
             floors = grp["floor"].dropna().tolist()
             if not floors:
