@@ -12,10 +12,8 @@ primary_region = 'sin'
   APP_NAME = 'Maple Meta Dashboard'
   PATCH_NOTE_BASE_PATH = ''
   PGDATABASE = 'postgres'
-  PGHOST = 'db.okjrtyiucbywjhqgvxsd.supabase.co'
   PGPORT = '5432'
   PGSCHEMA = 'public'
-  PGUSER = 'postgres'
   PORT = '8080'
 
 [http_service]
