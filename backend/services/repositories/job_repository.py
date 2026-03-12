@@ -249,7 +249,7 @@ def _shift_score_job_lookup_names(job: str) -> list[str]:
 
 
 def _get_shift_score_for_job(job: str, version: str | None = None) -> float | None:
-    """dm_shift_score에서 해당 job의 지정 version·segment=50층 shift score 조회."""
+    """dm_shift_score에서 해당 job의 지정 version·segment=전체·filter=전체 shift score 조회."""
     if not version:
         version = _get_latest_version_with_shift_data()
     if not version:
@@ -264,16 +264,19 @@ def _get_shift_score_for_job(job: str, version: str | None = None) -> float | No
     score_col = "total_score_100" if has_100 else "total_shift"
     job_candidates = _shift_score_job_lookup_names(job)
     placeholders = ", ".join(f":job_{i}" for i in range(len(job_candidates)))
+    filter_clause = ' AND "filter" = :filter' if "filter" in cols else ""
     query = text(
         f"""
         SELECT "{score_col}"
         FROM "{settings.pg_schema}"."dm_shift_score"
-        WHERE "job" IN ({placeholders}) AND "version" = :version AND "segment" = :segment
+        WHERE "job" IN ({placeholders}) AND "version" = :version AND "segment" = :segment{filter_clause}
         ORDER BY "job" = :job_0 DESC
         LIMIT 1
         """
     )
-    params: dict[str, object] = {"version": version, "segment": "50층"}
+    params: dict[str, object] = {"version": version, "segment": "전체"}
+    if "filter" in cols:
+        params["filter"] = "전체"
     for i, j in enumerate(job_candidates):
         params[f"job_{i}"] = j
     try:
@@ -925,22 +928,27 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
         if c not in cm_frame.columns:
             cm_frame[c] = "-"
 
-    # dm_shift_score에서 해당 버전·50층 점수 조회
+    # dm_shift_score에서 해당 버전·전체 세그먼트·전체 필터 점수 조회 (직업분석용)
     ss_cols = _get_table_columns("dm_shift_score")
     score_map: dict[str, float] = {}
     if version and ss_cols and all(k in ss_cols for k in ["version", "job", "segment", "total_shift"]):
         has_100 = "total_score_100" in ss_cols
         score_col_name = "total_score_100" if has_100 else "total_shift"
+        has_filter_col = "filter" in ss_cols
+        filter_clause = ' AND "filter" = :filter' if has_filter_col else ""
         job_normalized_sql = "CASE WHEN \"job\" = '캐논마스터' THEN '캐논슈터' ELSE \"job\" END"
+        ss_params: dict[str, object] = {"version": version, "segment": "전체"}
+        if has_filter_col:
+            ss_params["filter"] = "전체"
         try:
             with get_engine().connect() as conn:
                 ss_frame = pd.read_sql_query(
                     text(
                         f'SELECT {job_normalized_sql} AS "job", "{score_col_name}" AS "score" '
                         f'FROM "{settings.pg_schema}"."dm_shift_score" '
-                        f'WHERE "version" = :version AND "segment" = :segment'
+                        f'WHERE "version" = :version AND "segment" = :segment{filter_clause}'
                     ),
-                    conn, params={"version": version, "segment": "50층"},
+                    conn, params=ss_params,
                 )
         except SQLAlchemyError:
             ss_frame = pd.DataFrame()

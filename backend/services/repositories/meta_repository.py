@@ -156,46 +156,24 @@ def _read_shift_ranks_from_dm(
     empty_kpi: dict[str, int | None] = {"outcome": None, "stat": None, "build": None}
     settings = get_settings()
     cols = _get_table_columns("dm_shift_score")
-    if not cols or "version" not in cols or "job" not in cols or "segment" not in cols or "total_shift" not in cols:
+    if not cols or "version" not in cols or "job" not in cols or "segment" not in cols or "filter" not in cols or "total_shift" not in cols:
         return empty, empty, empty_kpi
 
     has_100 = all(c in cols for c in ["outcome_score_100", "stat_score_100", "build_score_100", "total_score_100"])
-    select_cols = ['s."job"', 's."segment"', 's."total_shift"']
+    select_cols = ['"job"', '"segment"', '"total_shift"']
     if has_100:
-        select_cols.extend(['s."outcome_score_100"', 's."stat_score_100"', 's."build_score_100"', 's."total_score_100"'])
+        select_cols.extend(['"outcome_score_100"', '"stat_score_100"', '"build_score_100"', '"total_score_100"'])
     select_clause = ", ".join(select_cols)
-
-    cm_cols = _get_table_columns("character_master")
-    type_col = _pick_column(cm_cols, ["type", "job_type"]) if cm_cols else None
-    join_type = type_filter != "전체" and type_col
-
-    join_clause = ""
-    where_clause = 's."version" = :version'
-    params: dict[str, object] = {"version": str(version).strip()}
-    job_col_cm = _pick_column(cm_cols, ["job", "job_name"])
-    if join_type and job_col_cm:
-        join_clause = f' JOIN "{settings.pg_schema}"."character_master" c ON s."job" = c."{job_col_cm}"'
-        # 제논(도적/해적)은 도적·해적 양쪽 모두 포함
-        if type_filter == "도적":
-            where_clause += f' AND (c."{type_col}" = :type_value OR c."{type_col}" = :type_dual)'
-            params["type_value"] = "도적"
-            params["type_dual"] = "도적/해적"
-        elif type_filter == "해적":
-            where_clause += f' AND (c."{type_col}" = :type_value OR c."{type_col}" = :type_dual)'
-            params["type_value"] = "해적"
-            params["type_dual"] = "도적/해적"
-        else:
-            where_clause += f' AND c."{type_col}" = :type_value'
-            params["type_value"] = type_filter
 
     query = text(
         f"""
         SELECT {select_clause}
-        FROM "{settings.pg_schema}"."dm_shift_score" s
-        {join_clause}
-        WHERE {where_clause}
+        FROM "{settings.pg_schema}"."dm_shift_score"
+        WHERE "version" = :version AND "filter" = :filter
+          AND "segment" IN ('50층', '상위권')
         """
     )
+    params: dict[str, object] = {"version": str(version).strip(), "filter": type_filter}
     try:
         with get_engine().connect() as conn:
             frame = pd.read_sql_query(query, conn, params=params)
@@ -220,6 +198,8 @@ def _read_shift_ranks_from_dm(
             t = pd.to_numeric(top[col], errors="coerce").mean() if not top.empty else 0.0
             kpi[key] = int(round(0.7 * m + 0.3 * t))
 
+    score_col = "total_score_100" if has_100 and "total_score_100" in frame.columns else "total_shift"
+
     rank50 = (
         frame[frame["segment"] == "50층"]
         .assign(_abs=lambda x: x["total_shift"].abs())
@@ -227,7 +207,6 @@ def _read_shift_ranks_from_dm(
         .drop(columns=["_abs"])
         .reset_index(drop=True)
     )
-    score_col = "total_score_100" if has_100 and "total_score_100" in rank50.columns else "total_shift"
     rank50["순위"] = rank50.index + 1
     rank50["_score"] = rank50[score_col]
     if score_col == "total_score_100":
@@ -254,59 +233,46 @@ def _read_shift_ranks_from_dm(
     return df_rank50, df_rank_upper, kpi
 
 
-def _read_balance_score_from_dm(version: str) -> dict | None:
+def _read_balance_score_from_dm(version: str, type_filter: str = "전체") -> dict | None:
     """dm_balance_score에서 밸런스 점수·보조지표 조회."""
     settings = get_settings()
     cols = _get_table_columns("dm_balance_score")
-    if not cols or "version" not in cols or "segment" not in cols or "balance_score" not in cols:
+    if not cols or "version" not in cols or "filter" not in cols or "balance_score" not in cols:
         return None
 
     query = text(
         f"""
-        SELECT "segment", "balance_score", "top_job", "top_share", "cr3", "top_type", "top_type_share"
+        SELECT "balance_score", "top_job", "top_share", "cr3", "top_type", "top_type_share"
         FROM "{settings.pg_schema}"."dm_balance_score"
-        WHERE "version" = :version
+        WHERE "version" = :version AND "filter" = :filter
+        LIMIT 1
         """
     )
     try:
         with get_engine().connect() as conn:
-            frame = pd.read_sql_query(query, conn, params={"version": str(version).strip()})
+            frame = pd.read_sql_query(query, conn, params={"version": str(version).strip(), "filter": type_filter})
     except SQLAlchemyError:
         return None
 
     if frame.empty:
         return None
 
-    total_row = frame[frame["segment"] == "total"]
-    if total_row.empty:
-        total_row = frame.iloc[[0]]
-    row = total_row.iloc[0]
-    score = int(row.get("balance_score", 0))
+    row = frame.iloc[0]
+    score = int(row.get("balance_score", 0) or 0)
     top_job = str(row.get("top_job", "") or "").strip()
     top_share = float(row.get("top_share") or 0)
     cr3 = float(row.get("cr3") or 0)
     top_type = str(row.get("top_type", "") or "").strip()
     top_type_share = float(row.get("top_type_share") or 0)
 
-    if not top_job and not total_row.empty:
-        seg50 = frame[frame["segment"] == "50층"]
-        seg_upper = frame[frame["segment"] == "상위권"]
-        fallback = seg50.iloc[0] if not seg50.empty else (seg_upper.iloc[0] if not seg_upper.empty else None)
-        if fallback is not None:
-            top_job = str(fallback.get("top_job", "") or "").strip()
-            top_share = float(fallback.get("top_share") or 0)
-            cr3 = float(fallback.get("cr3") or 0)
-            top_type = str(fallback.get("top_type", "") or "").strip()
-            top_type_share = float(fallback.get("top_type_share") or 0)
-
     if score >= 85:
         msg = "밸런스가 잘 맞아요! 이번 패치 기준 직업 분포가 전반적으로 고르게 유지되고 있어요."
     elif score >= 70:
         msg = "전반적으로 밸런스는 양호해요. 다만 일부 직업이 조금 더 선호되는 경향이 있어요."
     elif score >= 55:
-        msg = "특정 직업에 쏠림이 보여요. 현재 메타는 {top_job} 중심으로 점유율이 높아요.".format(top_job=top_job or "-")
+        msg = f"특정 직업에 쏠림이 보여요. 현재 메타는 {top_job or '-'} 중심으로 점유율이 높아요."
     else:
-        msg = "메타가 특정 직업에 크게 몰려 있어요: {top_job} 비중이 매우 높습니다.".format(top_job=top_job or "-")
+        msg = f"메타가 특정 직업에 크게 몰려 있어요: {top_job or '-'} 비중이 매우 높습니다."
 
     return {
         "balance_score": score,
@@ -452,7 +418,7 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         work = all_work.copy()
 
     shift_rank_50, shift_rank_upper, shift_kpi = _read_shift_ranks_from_dm(type_filter, version)
-    balance_data = _read_balance_score_from_dm(version)
+    balance_data = _read_balance_score_from_dm(version, type_filter=type_filter)
 
     violin = _compute_violin(work)
     ter = _compute_ter(work)
