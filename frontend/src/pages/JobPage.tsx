@@ -188,6 +188,7 @@ export function JobPage() {
                     </div>
                     <HistogramCompare
                       data={stats.data.hexacore_compare}
+                      continuous
                       title="헥사코어 레벨 합 분포 (패치 전후 비교)"
                       currentLabel={stats.data.selected_version}
                       previousLabel={stats.data.previous_version}
@@ -206,6 +207,7 @@ export function JobPage() {
                   <div className="space-y-4">
                     <HistogramCompare
                       data={stats.data.starforce_compare}
+                      continuous
                       title="스타포스 분포 (패치 전후 비교)"
                       currentLabel={stats.data.selected_version}
                       previousLabel={stats.data.previous_version}
