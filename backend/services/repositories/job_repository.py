@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import lru_cache
 from pathlib import Path
 
 import pandas as pd
@@ -39,6 +40,7 @@ _HYPER_STAT_COLS = [
 ]
 
 
+@lru_cache(maxsize=32)
 def _get_table_columns(table_name: str) -> list[str]:
     settings = get_settings()
     query = text(

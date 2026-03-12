@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 import pandas as pd
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
@@ -11,6 +13,7 @@ from services.db import get_engine
 META_JOB_NAME_NORMALIZE = {"캐논마스터": "캐논슈터"}
 
 
+@lru_cache(maxsize=32)
 def _get_table_columns(table_name: str) -> list[str]:
     settings = get_settings()
     query = text(
@@ -146,6 +149,119 @@ def get_available_versions(type_filter: str = "전체") -> list[str]:
         reverse=True,
     )
     return versions
+
+
+def _get_latest_version_db() -> str:
+    """dm_rank에서 최신 버전을 단일 쿼리로 조회."""
+    settings = get_settings()
+    try:
+        with get_engine().connect() as conn:
+            row = conn.execute(
+                text(f'SELECT "version" FROM "{settings.pg_schema}"."dm_rank" WHERE "version" IS NOT NULL ORDER BY "version" DESC LIMIT 1')
+            ).fetchone()
+            return str(row[0]).strip() if row and row[0] else ""
+    except SQLAlchemyError:
+        return ""
+
+
+def _read_bump_from_db(type_filter: str) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """dm_rank에서 bump 차트용 데이터를 SQL GROUP BY로 집계하여 반환.
+
+    39k rows 전체 읽기 대신 DB에서 date/version/job 단위로 사전 집계.
+    """
+    empty_bump = pd.DataFrame(columns=["date", "job_name", "rank", "rate", "count", "rate_delta_str", "achieved", "total"])
+    empty_vc = pd.DataFrame(columns=["date", "version"])
+
+    settings = get_settings()
+    cols = _get_table_columns("dm_rank")
+    if not cols:
+        return empty_bump, empty_vc
+
+    floor_col = _pick_column(cols, ["floor", "max_floor"])
+    job_col = _pick_column(cols, ["job", "job_name", "class_name"])
+    type_col = _pick_column(cols, ["type", "job_type", "category"])
+    date_col = _pick_column(cols, ["date", "snapshot_date"])
+    version_col = _pick_column(cols, ["version"])
+
+    if not all([floor_col, job_col, date_col, version_col]):
+        return empty_bump, empty_vc
+
+    # 제논(도적/해적)은 도적·해적 양쪽 포함
+    where_clause = ""
+    params: dict[str, object] = {}
+    if type_filter != "전체" and type_col:
+        if type_filter == "도적":
+            where_clause = f' WHERE ("{type_col}" = :type_value OR "{type_col}" = :type_dual)'
+            params["type_value"] = "도적"
+            params["type_dual"] = "도적/해적"
+        elif type_filter == "해적":
+            where_clause = f' WHERE ("{type_col}" = :type_value OR "{type_col}" = :type_dual)'
+            params["type_value"] = "해적"
+            params["type_dual"] = "도적/해적"
+        else:
+            where_clause = f' WHERE "{type_col}" = :type_value'
+            params["type_value"] = type_filter
+
+    job_expr = f"CASE WHEN \"{job_col}\" = '캐논마스터' THEN '캐논슈터' ELSE \"{job_col}\" END"
+
+    query = text(
+        f"""
+        SELECT
+            "{date_col}" AS date,
+            "{version_col}" AS version,
+            {job_expr} AS job_name,
+            AVG(CASE WHEN "{floor_col}" >= 50 THEN 1.0 ELSE 0.0 END) AS rate,
+            COUNT(*) AS count
+        FROM "{settings.pg_schema}"."dm_rank"
+        {where_clause}
+        GROUP BY "{date_col}", "{version_col}", {job_expr}
+        ORDER BY "{date_col}", job_name
+        """
+    )
+    try:
+        with get_engine().connect() as conn:
+            frame = pd.read_sql_query(query, conn, params=params)
+    except SQLAlchemyError:
+        return empty_bump, empty_vc
+
+    if frame.empty:
+        return empty_bump, empty_vc
+
+    frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
+    frame["rate"] = pd.to_numeric(frame["rate"], errors="coerce")
+    frame["count"] = pd.to_numeric(frame["count"], errors="coerce").fillna(0).astype(int)
+    frame = frame.dropna(subset=["date", "rate"])
+    frame["version"] = frame["version"].astype(str).str.strip()
+
+    # ranking, delta 계산 (집계된 소규모 데이터셋에서 실행)
+    frame = frame.sort_values(["date", "rate", "count"], ascending=[True, False, False])
+    frame["rank"] = frame.groupby("date")["rate"].rank(method="first", ascending=False)
+    frame["rate_prev"] = frame.groupby("job_name")["rate"].shift(1)
+    frame["rate_delta_pct"] = (frame["rate"] - frame["rate_prev"]) * 100
+    frame["rate_delta_str"] = frame["rate_delta_pct"].apply(
+        lambda x: f"{x:+.1f}%p" if pd.notna(x) else "-"
+    )
+    frame["achieved"] = (frame["rate"] * frame["count"]).astype(int)
+    frame["total"] = frame["count"]
+
+    bump = (
+        frame[["date", "job_name", "rank", "rate", "count", "rate_delta_str", "achieved", "total"]]
+        .sort_values(["date", "rank"])
+        .reset_index(drop=True)
+    )
+
+    # 버전 변경 마커 (vlines용)
+    version_daily = (
+        frame[["date", "version"]]
+        .drop_duplicates()
+        .sort_values("date")
+        .reset_index(drop=True)
+    )
+    version_mask = version_daily["version"] != version_daily["version"].shift(1)
+    version_mask &= version_daily["version"].shift(1).notna()
+    version_change = version_daily[version_mask][["date", "version"]].reset_index(drop=True)
+
+    return bump, version_change
 
 
 def _read_shift_ranks_from_dm(
@@ -392,37 +508,24 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         "selected_version": version or "",
     }
 
-    # bump chart용: 전체 기간 (버전 무관), 경량화 limit
-    all_work = _read_dm_rank_frame(type_filter=type_filter, limit=100000)
-    if all_work.empty:
-        return empty_payload
-
-    all_work["version"] = all_work["version"].astype(str).str.strip()
-
+    # 버전 결정
     if not version:
-        versions = sorted(
-            {v for v in all_work["version"].dropna().tolist() if str(v).strip()},
-            reverse=True,
-        )
-        version = versions[0] if versions else ""
+        version = _get_latest_version_db()
     version = str(version).strip() if version else ""
 
-    # violin/ter용: 해당 버전 데이터만 DB에서 직접 조회
-    if version:
-        work = _read_dm_rank_frame(type_filter=type_filter, version=version, limit=30000)
-        if work.empty:
-            work = all_work[all_work["version"] == version].copy()
-    else:
-        work = all_work.copy()
-    if work.empty:
-        work = all_work.copy()
+    if not version:
+        return empty_payload
+
+    # violin/ter용: 해당 버전 데이터만 조회
+    work = _read_dm_rank_frame(type_filter=type_filter, version=version, limit=30000)
 
     shift_rank_50, shift_rank_upper, shift_kpi = _read_shift_ranks_from_dm(type_filter, version)
     balance_data = _read_balance_score_from_dm(version, type_filter=type_filter)
 
     violin = _compute_violin(work)
     ter = _compute_ter(work)
-    bump_by_date, version_change = _compute_bump(all_work)
+    # bump chart: SQL GROUP BY 집계로 39k rows 전체 읽기 대체
+    bump_by_date, version_change = _read_bump_from_db(type_filter)
 
     # 50층 달성률 추이: x축 날짜 범위 = 선택된 버전 기준 전후 5주, top10 = 버전 보조선 날짜 기준
     bump_xaxis_range: tuple[str, str] | None = None

@@ -5,17 +5,22 @@ from sqlalchemy.engine import Engine
 
 from services.config import get_settings
 
+_engine: Engine | None = None
+
 
 def get_engine() -> Engine:
-    settings = get_settings()
-    return create_engine(
-        settings.sqlalchemy_url,
-        pool_pre_ping=True,
-        pool_size=1,
-        max_overflow=0,
-        pool_recycle=300,
-        connect_args={"connect_timeout": 5},
-    )
+    global _engine
+    if _engine is None:
+        settings = get_settings()
+        _engine = create_engine(
+            settings.sqlalchemy_url,
+            pool_pre_ping=True,
+            pool_size=3,
+            max_overflow=2,
+            pool_recycle=300,
+            connect_args={"connect_timeout": 10},
+        )
+    return _engine
 
 
 def check_connection() -> bool:
