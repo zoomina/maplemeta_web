@@ -22,7 +22,7 @@ function arcPoint(fraction: number): [number, number] {
 function arcPath(f1: number, f2: number): string {
   const [x1, y1] = arcPoint(f1);
   const [x2, y2] = arcPoint(f2);
-  const large = f2 - f1 > 0.5 ? 1 : 0;
+  const large = 0; // 반원은 항상 180° 미만이므로 large-arc 불필요
   return `M ${x1} ${y1} A ${R} ${R} 0 ${large} 0 ${x2} ${y2}`;
 }
 
