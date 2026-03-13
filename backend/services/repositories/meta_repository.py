@@ -381,14 +381,23 @@ def _read_balance_score_from_dm(version: str, type_filter: str = "전체") -> di
     top_type = str(row.get("top_type", "") or "").strip()
     top_type_share = float(row.get("top_type_share") or 0)
 
-    if score >= 85:
-        msg = "밸런스가 잘 맞아요! 이번 패치 기준 직업 분포가 전반적으로 고르게 유지되고 있어요."
-    elif score >= 70:
-        msg = "전반적으로 밸런스는 양호해요. 다만 일부 직업이 조금 더 선호되는 경향이 있어요."
-    elif score >= 55:
-        msg = f"특정 직업에 쏠림이 보여요. 현재 메타는 {top_job or '-'} 중심으로 점유율이 높아요."
+    # p1 규칙: 1위 직업 점유율에 따라 최저 메시지 등급 강제 적용 (260313_update.md)
+    effective_score = score
+    if top_share >= 0.50:
+        effective_score = min(effective_score, 49)  # 최소 뚜렷한 쏠림 구간
+    elif top_share >= 0.40:
+        effective_score = min(effective_score, 64)  # 최소 경미한 쏠림 구간
+
+    if effective_score >= 80:
+        msg = 직업 분포가 전반적으로 고르게 유지되고 있어요. 현재 메타는 비교적 균형적인 편입니다.
+    elif effective_score >= 65:
+        msg = 전반적으로는 양호하지만, 일부 직업이 조금 더 선호되고 있어요.
+    elif effective_score >= 50:
+        msg = 특정 직업으로의 쏠림이 조금 나타나고 있어요. 현재 메타는 일부 상위 직업 중심으로 움직이고 있습니다.
+    elif effective_score >= 35:
+        msg = 특정 직업에 대한 선호가 뚜렷합니다. 현재 메타는 상위 직업 중심으로 경직되는 경향이 있습니다.
     else:
-        msg = f"메타가 특정 직업에 크게 몰려 있어요: {top_job or '-'} 비중이 매우 높습니다."
+        msg = 메타가 특정 직업에 강하게 몰려 있어요. 현재는 일부 직업의 점유율이 매우 높아 밸런스가 심하게 경직된 상태입니다.
 
     return {
         "balance_score": score,

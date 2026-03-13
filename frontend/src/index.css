@@ -82,3 +82,27 @@ body {
 ::-webkit-scrollbar-track { background: #0F1117; }
 ::-webkit-scrollbar-thumb { background: #2A2D3E; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: #383B52; }
+
+/* prose-dark 패치노트 테이블 아웃라인 (260313_update.md 항목 10) */
+.prose-dark table {
+  width: 100%;
+  border-collapse: collapse;
+  margin: 1em 0;
+  font-size: 0.875rem;
+}
+.prose-dark thead th {
+  background-color: #1F2440;
+  color: #F1F5F9;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: 1px solid #383B52;
+  text-align: left;
+}
+.prose-dark tbody td {
+  color: #94A3B8;
+  padding: 7px 12px;
+  border: 1px solid #2A2D3E;
+}
+.prose-dark tbody tr:hover td {
+  background-color: #1F2440;
+}

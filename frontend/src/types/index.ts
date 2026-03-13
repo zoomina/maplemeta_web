@@ -121,3 +121,8 @@ export interface JobStats {
   extra_option_top5: Record<string, unknown>[];
   potential_top5: Record<string, unknown>[];
 }
+
+export interface VersionItem {
+  version: string;
+  start_date: string | null;
+}

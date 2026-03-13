@@ -1,3 +1,9 @@
+// JobPage 변경 사항 (260313_update.md):
+// - 항목 6: 전체 랭킹 shift score 컬럼 헤더에 ? 호버 툴팁 추가
+// - 항목 7: 직업 상세 이미지 - img_full_resolved(storage 이미지) 우선, 없으면 썸네일
+// - 항목 8: 하이퍼스탯 Top5 항목명 줄임말 → 풀네임 매핑
+// - 항목 9: stat/item 탭 버튼 눈에 띄는 탭 바 형태로 변경
+
 import { useState, useEffect } from 'react';
 import { useApi } from '../hooks/useApi';
 import { JobItem, JobDetail, JobStats } from '../types';
@@ -10,6 +16,44 @@ import { ErrorCard } from '../components/common/ErrorCard';
 
 const TYPE_OPTIONS = ['전체', '전사', '마법사', '궁수', '도적', '해적'];
 const SEGMENTS = ['전체', '50층', '상위권'];
+
+// 하이퍼스탯 컬럼명 → 풀네임 매핑 (항목 8, 260313_update.md)
+const HYPER_STAT_FULLNAME: Record<string, string> = {
+  '보공': '보스 공격력',
+  '크뎀': '크리티컬 데미지',
+  '데미지': '데미지',
+  '방무': '방어율 무시',
+  '공마': '공격력/마력',
+  '크확': '크리티컬 확률',
+  '일공': '일반 공격력',
+  '상태이상내성': '상태이상 내성',
+  '아케인포스': '아케인포스',
+  '경험치': '경험치 획득량',
+  'hp': 'HP',
+  'dex': 'DEX',
+  'int': 'INT',
+  'luck': 'LUK',
+  'mpstr': 'STR/MP',
+  'df_tf': 'DF/TF',
+};
+
+function mapHyperStatName(col: string): string {
+  return HYPER_STAT_FULLNAME[col] ?? col;
+}
+
+// 하이퍼스탯 top5 데이터의 '항목' 컬럼 값을 풀네임으로 변환
+function transformHyperTop5(data: Record<string, unknown>[]): Record<string, unknown>[] {
+  return data.map((row) => ({
+    ...row,
+    '항목': typeof row['항목'] === 'string' ? mapHyperStatName(row['항목']) : row['항목'],
+  }));
+}
+
+// Shift score 설명 툴팁 내용 (항목 6)
+const SHIFT_SCORE_TOOLTIP =
+  'Shift Score: 이전 패치 대비 메타 변화 크기를 나타내는 점수입니다.\n' +
+  '양수(+)는 직업 성과·효율이 상향된 방향, 음수(-)는 하향된 방향을 의미합니다.\n' +
+  '절댓값이 클수록 메타 변화 폭이 큽니다.';
 
 export function JobPage() {
   const { data: versions } = useApi<string[]>('/api/version/list');
@@ -75,14 +119,21 @@ export function JobPage() {
           <>
             {/* 직업 정보 행 */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              {/* 직업 이미지 */}
-              <div className="card flex items-center justify-center min-h-48">
-                {detail.data.img_full_resolved ? (
+              {/* 직업 전신 이미지 (항목 7: storage 이미지 우선) */}
+              <div className="card flex items-center justify-center min-h-48 overflow-hidden">
+                {detail.data.img_full_resolved && !detail.data.img_full_resolved.startsWith('https://lwi.nexon.com') ? (
                   <img
                     src={detail.data.img_full_resolved}
                     alt={detail.data.job}
-                    className="max-h-64 object-contain"
-                    onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                    className="max-h-72 w-full object-contain object-center"
+                    onError={(e) => {
+                      const img = e.target as HTMLImageElement;
+                      if (detail.data?.img) {
+                        img.src = detail.data.img;
+                      } else {
+                        img.style.display = 'none';
+                      }
+                    }}
                   />
                 ) : detail.data.img ? (
                   <img src={detail.data.img} alt={detail.data.job} className="w-32 h-32 object-contain rounded-full" />
@@ -108,7 +159,7 @@ export function JobPage() {
                     <div className="text-xl font-bold text-[#FF8C00]">{detail.data.floor50_rate ?? '-'}</div>
                   </div>
                   <div>
-                    <div className="text-xs text-[#94A3B8]">shift score</div>
+                    <div className="text-xs text-[#94A3B8]">Shift Score</div>
                     <div className="text-xl font-bold text-[#F1F5F9]">{detail.data.shift_score ?? '-'}</div>
                   </div>
                 </div>
@@ -132,7 +183,7 @@ export function JobPage() {
               </div>
             </div>
 
-            {/* 세그먼트 + 탭 */}
+            {/* 세그먼트 + 탭 (항목 9: 탭 버튼 가시적 탭 바 형태) */}
             <div className="flex flex-wrap items-center gap-4">
               <div className="flex gap-1">
                 {SEGMENTS.map((s) => (
@@ -149,18 +200,20 @@ export function JobPage() {
                   </button>
                 ))}
               </div>
-              <div className="flex gap-1 ml-auto">
+
+              {/* 탭 바 (항목 9) */}
+              <div className="ml-auto flex rounded-lg overflow-hidden border border-[#2A2D3E]">
                 {(['stat', 'item'] as const).map((tab) => (
                   <button
                     key={tab}
                     onClick={() => setActiveTab(tab)}
-                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                    className={`px-6 py-2 text-sm font-semibold transition-all ${
                       activeTab === tab
-                        ? 'bg-[#FF8C00]/10 text-[#FF8C00] border border-[#FF8C00]/30'
-                        : 'text-[#94A3B8] border border-[#2A2D3E] hover:text-[#F1F5F9]'
+                        ? 'bg-[#FF8C00] text-[#0F1117]'
+                        : 'bg-[#1A1D2E] text-[#94A3B8] hover:bg-[#1F2440] hover:text-[#F1F5F9]'
                     }`}
                   >
-                    {tab}
+                    {tab === 'stat' ? '스탯' : '아이템'}
                   </button>
                 ))}
               </div>
@@ -194,7 +247,8 @@ export function JobPage() {
                       previousLabel={stats.data.previous_version}
                     />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      <TopTable title="하이퍼스탯 Top 5" data={stats.data.hyper_top5} />
+                      {/* 하이퍼스탯 풀네임 변환 (항목 8) */}
+                      <TopTable title="하이퍼스탯 Top 5" data={transformHyperTop5(stats.data.hyper_top5)} />
                       <div className="space-y-4">
                         <TopTable title="어빌리티 Top 3 (Boss)" data={stats.data.ability_boss_top3} />
                         <TopTable title="어빌리티 Top 3 (Field)" data={stats.data.ability_field_top3} />
@@ -300,7 +354,7 @@ export function JobPage() {
           </div>
         </div>
 
-        {/* 우측: 랭킹 테이블 */}
+        {/* 우측: 랭킹 테이블 (항목 6: shift score 툴팁) */}
         <div className="col-span-5 md:col-span-7">
           <h3 className="text-sm font-bold text-[#F1F5F9] mb-3">전체 랭킹</h3>
           {ranking.loading && <LoadingSpinner className="py-8" />}
@@ -310,11 +364,27 @@ export function JobPage() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[#2A2D3E]">
-                      {Object.keys(ranking.data[0]).map((k) => (
-                        <th key={k} className="px-4 py-2.5 text-left text-xs font-semibold text-[#94A3B8] uppercase tracking-wider">
-                          {k}
-                        </th>
-                      ))}
+                      {Object.keys(ranking.data[0]).map((k) => {
+                        const isShift = k.toLowerCase().includes('shift');
+                        return (
+                          <th
+                            key={k}
+                            className="px-4 py-2.5 text-left text-xs font-semibold text-[#94A3B8] uppercase tracking-wider"
+                          >
+                            {isShift ? (
+                              <span className="flex items-center gap-1">
+                                {k}
+                                <span
+                                  title={SHIFT_SCORE_TOOLTIP}
+                                  className="inline-flex items-center justify-center w-4 h-4 rounded-full border border-[#64748B] text-[#64748B] text-[10px] cursor-help hover:border-[#FF8C00] hover:text-[#FF8C00] transition-colors"
+                                >
+                                  ?
+                                </span>
+                              </span>
+                            ) : k}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody>
