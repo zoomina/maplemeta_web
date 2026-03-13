@@ -19,3 +19,6 @@ frontend/node_modules/
 .idea/
 .vscode/
 *.swp
+
+# note
+note/
