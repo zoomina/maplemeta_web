@@ -315,22 +315,21 @@ def get_character_detail(job: str, version: str | None = None) -> dict:
         }
 
     row = target.iloc[0]
-    row = target.iloc[0]
-    job_name_str = str(row.get(job, )).strip()
-    img_full_raw = row.get(img_full, ) or 
+    job_name_str = str(row.get("job", "")).strip()
+    img_full_raw = row.get("img_full", "") or ""
     resolved = _resolve_img_full(img_full_raw)
-    # img_full이 비어있으면 job명으로 storage(/home/jamin/static/character/) 직접 탐색
+    # img_full 비어있으면 storage 직접 탐색 (260313_update.md 항목 7)
     if resolved is None and job_name_str:
-        for _ext in [.jpg, .jpeg, .webp, .png]:
-            _candidate = Path(/home/jamin/static/character) / f{job_name_str}{_ext}
+        for _ext in [".jpg", ".jpeg", ".webp", ".png"]:
+            _candidate = Path("/home/jamin/static/character") / f"{job_name_str}{_ext}"
             if _candidate.exists():
                 resolved = str(_candidate)
                 break
-    # 여전히 없으면 img(썸네일 URL) 폴백
     if resolved is None:
-        img_url = str(row.get(img, ) or ).strip()
-        if img_url.startswith(http://) or img_url.startswith(https://):
-            resolved = img_url  # 로컬 파일 없을 때 img(웹 URL) 폴백
+        img_url = str(row.get("img", "") or "").strip()
+        if img_url.startswith("http://") or img_url.startswith("https://"):
+            resolved = img_url
+    return {
         "job": row.get("job", ""),
         "type": row.get("type", ""),
         "category": row.get("category", ""),
