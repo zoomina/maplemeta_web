@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from functools import lru_cache
+
 from datetime import date
 from pathlib import Path
 
@@ -11,6 +13,7 @@ from services.config import get_settings
 from services.db import get_engine
 
 
+@lru_cache(maxsize=32)
 def _get_table_columns(table_name: str) -> list[str]:
     settings = get_settings()
     query = text(

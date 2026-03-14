@@ -563,7 +563,7 @@ def _compute_bump(all_work: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
     return bump, version_change
 
 
-def get_meta_overview(type_filter: str = "전체", version: str | None = None) -> dict:
+def _get_meta_overview_impl(type_filter: str, version: str | None) -> dict:
     from services.repositories.job_repository import get_job_style_map
 
     empty_shift = pd.DataFrame(columns=["순위", "직업", "shift score"])
@@ -684,3 +684,9 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         "shift_rank_upper": shift_rank_upper,
         "selected_version": version,
     }
+
+def get_meta_overview(type_filter: str = "전체", version: str | None = None) -> dict:
+    """TTL-cached wrapper around _get_meta_overview_impl (5-minute cache)."""
+    from services.cache import ttl_cached
+    cache_key = f"meta_overview:{type_filter}:{version or ''}"
+    return ttl_cached(cache_key, 300.0, lambda: _get_meta_overview_impl(type_filter, version))

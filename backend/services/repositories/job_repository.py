@@ -773,7 +773,12 @@ def _get_hyper_master_labels(job_name: str, version: str) -> tuple[str, str, str
     return h1, h2, h3
 
 
-def _compute_radar_payload(job_name: str, version: str) -> dict:
+def _compute_radar_payload(
+    job_name: str,
+    version: str,
+    force: pd.DataFrame | None = None,
+    hyper: pd.DataFrame | None = None,
+) -> dict:
     """Compute radar chart data (5 axes: starforce, hexa_level, hyper1/2/3)."""
 
     def _seg_mean(frame: pd.DataFrame, col: str, segment: str) -> float:
@@ -783,9 +788,11 @@ def _compute_radar_payload(job_name: str, version: str) -> dict:
         vals = pd.to_numeric(seg_frame[col], errors="coerce").dropna()
         return float(vals.mean()) if not vals.empty else 0.0
 
-    # Read dm_force and dm_hyper for this job+version
-    force = _read_table_for_job("dm_force", job_name, version=version)
-    hyper = _read_table_for_job("dm_hyper", job_name, version=version)
+    # Use pre-loaded frames if provided, otherwise query DB
+    if force is None:
+        force = _read_table_for_job("dm_force", job_name, version=version)
+    if hyper is None:
+        hyper = _read_table_for_job("dm_hyper", job_name, version=version)
 
     # Get hyper label names from hyper_master
     h1_label, h2_label, h3_label = _get_hyper_master_labels(job_name, version)
@@ -992,6 +999,13 @@ def _get_shift_score_ranking(type_filter: str, top_n: int = 25, version: str | N
 
 def _build_ranking_panel_frame(type_filter: str, version: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame]:
     """shift score 기반 전체 캐릭터 순위. 데이터 없는 직업은 최하단에 표시."""
+    from services.cache import ttl_cached
+    cache_key = f"ranking_panel:{type_filter}:{version or ''}"
+    return ttl_cached(cache_key, 300.0, lambda: _build_ranking_panel_impl(type_filter, version))
+
+
+def _build_ranking_panel_impl(type_filter: str, version: str | None) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Implementation (called via TTL-cached _build_ranking_panel_frame)."""
     ranking = _get_shift_score_ranking(type_filter=type_filter, version=version)
     if ranking.empty:
         return pd.DataFrame(columns=["Rank", "직업", "계열", "type", "주스탯", "50층달성률", "shift score"]), ranking
@@ -1080,9 +1094,15 @@ def get_stat_item_frames(job_name: str, segment: str, version: str | None = None
     hyper_curr = _load_seg(hyper_all, selected_version, segment)
     hyper_prev = _load_seg(hyper_all, previous_version, segment)
 
-    # For rank-based filters (dm_rank has floor, not segment column)
-    rank_curr = _read_table_for_job("dm_rank", job_name, version=selected_version) if selected_version else rank_all.copy()
-    rank_prev = _read_table_for_job("dm_rank", job_name, version=previous_version) if previous_version else pd.DataFrame()
+    # For rank-based filters: filter already-loaded rank_all instead of re-querying
+    if selected_version and "version" in rank_all.columns:
+        rank_curr = rank_all[rank_all["version"] == selected_version].copy()
+    else:
+        rank_curr = rank_all.copy()
+    if previous_version and "version" in rank_all.columns:
+        rank_prev = rank_all[rank_all["version"] == previous_version].copy()
+    else:
+        rank_prev = pd.DataFrame()
     rank_curr_seg = _apply_segment_by_floor(rank_curr, segment)
     rank_prev_seg = _apply_segment_by_floor(rank_prev, segment)
 
@@ -1140,5 +1160,18 @@ def get_stat_item_frames(job_name: str, segment: str, version: str | None = None
         "subweapon_top5": _build_count_delta_table(subweapon_curr, subweapon_prev, "name", top_n=5),
         "extra_option_top5": _build_force_line_table(force_curr, force_prev, "additional", top_n=5),
         "potential_top5": _build_force_line_table(force_curr, force_prev, "potential", top_n=5),
-        "radar": _compute_radar_payload(job_name, selected_version),
+        "radar": _compute_radar_payload(
+            job_name,
+            selected_version,
+            force=(
+                force_all[force_all["version"] == selected_version].copy()
+                if selected_version and "version" in force_all.columns
+                else force_all.copy()
+            ),
+            hyper=(
+                hyper_all[hyper_all["version"] == selected_version].copy()
+                if selected_version and "version" in hyper_all.columns
+                else hyper_all.copy()
+            ),
+        ),
     }
