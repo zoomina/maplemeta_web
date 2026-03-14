@@ -161,7 +161,7 @@ def job_detail(job: str, version: str = Query("")) -> Dict[str, Any]:
             if math.isnan(sf) or math.isinf(sf):
                 detail["shift_score"] = None
             else:
-                detail["shift_score"] = str(int(round(sf)))
+                detail["shift_score"] = str(int(sf))  # 소수점 아래 절삭
         except (TypeError, ValueError):
             detail["shift_score"] = None
 

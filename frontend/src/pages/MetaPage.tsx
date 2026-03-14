@@ -185,9 +185,14 @@ export function MetaPage() {
           <div className="card">
             <h3 className="text-sm font-bold text-[#F1F5F9] mb-1">TER 분포</h3>
             <p className="text-xs text-[#64748B] mb-3">
-              시간 효율 비율(TER)은 분당 클리어 층수를 나타냅니다. 40~69층 기준으로, 값이 높을수록 같은 시간에 더 많은 층을 클리어하는 고효율 직업입니다.
+              층당 소요 시간(초) = 기록 시간 / 클리어 층수. 40~69층 기준이며, 값이 낮을수록 같은 시간에 더 많은 층을 클리어하는 고효율 직업입니다. 위쪽 막대는 50층 이상, 아래쪽 막대는 50층 미만 인원(직업별 스택)입니다.
             </p>
-            <TERChart data={data.ter} />
+            <TERChart
+              data={data.ter}
+              terBands={data.ter_bands ?? undefined}
+              terByBin={data.ter_by_bin ?? []}
+              jobStyle={data.violin?.map((v) => ({ job_name: v.job_name, color: v.color, img: v.img })) ?? []}
+            />
           </div>
 
           {/* Bump Chart (항목 3: 설명 추가) */}

@@ -36,8 +36,26 @@ export interface ViolinJobData {
 
 export interface TERJobData {
   job_name: string;
-  ter_p50: number;
+  sec_per_floor_p50: number;
   floor50_rate: number;
+  n: number;
+  n_50plus: number;
+  n_below50: number;
+  n_in_relaxed: number;
+}
+
+export interface TERBands {
+  relaxed_lo: number | null;
+  relaxed_hi: number | null;
+  near_lo: number | null;
+  near_hi: number | null;
+}
+
+export interface TERByBinItem {
+  job_name: string;
+  sec_bin: number;
+  n_50plus: number;
+  n_below50: number;
 }
 
 export interface BumpPoint {
@@ -61,6 +79,8 @@ export interface MetaData {
   shift_kpi: { outcome: number | null; stat: number | null; build: number | null } | null;
   violin: ViolinJobData[];
   ter: TERJobData[];
+  ter_bands: TERBands | null;
+  ter_by_bin?: TERByBinItem[];
   bump: BumpPoint[];
   version_changes: { date: string; version: string }[];
   bump_xaxis_range: [string, string] | null;

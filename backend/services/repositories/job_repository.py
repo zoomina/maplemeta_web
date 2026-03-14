@@ -172,6 +172,7 @@ def _resolve_img_full(raw: str | None) -> str | None:
     """Resolve img_full to a URL or local path.
 
     - Supabase Storage URL (https://...): returned as-is
+    - If SUPABASE_URL is set: img_full as filename -> character-images bucket public URL
     - Legacy local path (/static/img/character/...): mapped to filesystem
     """
     if not raw:
@@ -183,6 +184,14 @@ def _resolve_img_full(raw: str | None) -> str | None:
     # Already a URL (Supabase Storage or external)
     if value.startswith("http://") or value.startswith("https://"):
         return value
+
+    # Supabase Storage: character-images bucket (img_full = image filename)
+    settings = get_settings()
+    if settings.supabase_url:
+        filename = Path(value).name
+        if filename and filename != ".":
+            base_url = settings.supabase_url.rstrip("/")
+            return f"{base_url}/storage/v1/object/public/character-images/{filename}"
 
     # Legacy local path fallback
     if value.startswith("/static/img/"):
@@ -316,9 +325,17 @@ def get_character_detail(job: str, version: str | None = None) -> dict:
 
     row = target.iloc[0]
     job_name_str = str(row.get("job", "")).strip()
-    img_full_raw = row.get("img_full", "") or ""
+    # img_full 컬럼 파일명 우선 (DB: cha47.jpg 등 버킷과 동일한 이름)
+    img_full_raw = str(row.get("img_full") or row.get("full_img") or "").strip()
     resolved = _resolve_img_full(img_full_raw)
-    # img_full 비어있으면 storage 직접 탐색 (260313_update.md 항목 7)
+    # img_full에 파일명만 있는 경우 Supabase character-images 버킷 URL 보장
+    if not resolved and img_full_raw and "/" not in img_full_raw:
+        st = get_settings()
+        if st.supabase_url:
+            fn = Path(img_full_raw).name
+            if fn and fn != ".":
+                resolved = f"{st.supabase_url.rstrip('/')}/storage/v1/object/public/character-images/{fn}"
+    # img_full 비어있을 때만 로컬 storage 또는 썸네일 fallback
     if resolved is None and job_name_str:
         for _ext in [".jpg", ".jpeg", ".webp", ".png"]:
             _candidate = Path("/home/jamin/static/character") / f"{job_name_str}{_ext}"
@@ -979,18 +996,20 @@ def _build_ranking_panel_frame(type_filter: str, version: str | None = None) -> 
     if ranking.empty:
         return pd.DataFrame(columns=["Rank", "직업", "계열", "type", "주스탯", "50층달성률", "shift score"]), ranking
 
-    # 데이터 있는 직업: score 내림차순 / 없는 직업: 최하단
+    # 데이터 있는 직업: shift score 절대값 기준 내림차순 / 없는 직업: 최하단
     has_data = ranking["shift_score"].notna()
-    ranked = ranking[has_data].sort_values("shift_score", ascending=False).reset_index(drop=True)
+    ranked = ranking[has_data].copy()
+    ranked["_abs_shift"] = ranked["shift_score"].abs()
+    ranked = ranked.sort_values("_abs_shift", ascending=False).drop(columns=["_abs_shift"]).reset_index(drop=True)
     no_data = ranking[~has_data].reset_index(drop=True)
     ranking = pd.concat([ranked, no_data], ignore_index=True)
 
     def _fmt_shift(x):
         if x is None or (isinstance(x, float) and pd.isna(x)):
             return "데이터 없음"
-        if isinstance(x, (int, float)) and 0 <= x <= 100 and x == int(x):
-            return f"{int(x)}"
-        return f"{float(x):.3f}" if isinstance(x, (int, float)) else "데이터 없음"
+        if isinstance(x, (int, float)):
+            return str(int(x))  # 소수점 아래 절삭
+        return "데이터 없음"
 
     shift_display = ranking["shift_score"].apply(_fmt_shift)
     # 데이터 없는 직업은 Rank 표시 안 함

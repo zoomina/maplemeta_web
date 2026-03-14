@@ -18,6 +18,7 @@ class Settings:
     pg_schema: str
     app_name: str
     patch_note_base_path: str
+    supabase_url: str
 
     @property
     def sqlalchemy_url(self) -> str:
@@ -40,4 +41,5 @@ def get_settings() -> Settings:
         pg_schema=os.getenv("PGSCHEMA", "dm"),
         app_name=os.getenv("APP_NAME", "Maple Meta Dashboard"),
         patch_note_base_path=os.getenv("PATCH_NOTE_BASE_PATH", "/home/jamin/static/update"),
+        supabase_url=(os.getenv("SUPABASE_URL") or "").strip(),
     )

@@ -140,8 +140,39 @@ def meta_overview(
         for _, row in ter_df.iterrows():
             ter_out.append({
                 "job_name": str(row.get("job_name", "")),
-                "ter_p50": _safe_float(row.get("ter_p50")),
+                "sec_per_floor_p50": _safe_float(row.get("sec_per_floor_p50")),
                 "floor50_rate": _safe_float(row.get("floor50_rate")),
+                "n": int(row.get("n", 0)) if pd.notna(row.get("n")) else 0,
+                "n_50plus": int(row.get("n_50plus", 0)) if pd.notna(row.get("n_50plus")) else 0,
+                "n_below50": int(row.get("n_below50", 0)) if pd.notna(row.get("n_below50")) else 0,
+                "n_in_relaxed": int(row.get("n_in_relaxed", 0)) if pd.notna(row.get("n_in_relaxed")) else 0,
+            })
+    ter_bands_raw = data.get("ter_bands")
+    ter_bands: Optional[Dict[str, Optional[float]]] = None
+    if isinstance(ter_bands_raw, dict):
+        ter_bands = {
+            "relaxed_lo": _safe_float(ter_bands_raw.get("relaxed_lo")),
+            "relaxed_hi": _safe_float(ter_bands_raw.get("relaxed_hi")),
+            "near_lo": _safe_float(ter_bands_raw.get("near_lo")),
+            "near_hi": _safe_float(ter_bands_raw.get("near_hi")),
+        }
+
+    ter_by_bin_df: pd.DataFrame = data.get("ter_by_bin", pd.DataFrame())
+    ter_by_bin_out: List[Dict] = []
+    if not ter_by_bin_df.empty and all(c in ter_by_bin_df.columns for c in ["job_name", "sec_bin", "n_50plus", "n_below50"]):
+        for _, row in ter_by_bin_df.iterrows():
+            sec_bin_val = row.get("sec_bin")
+            try:
+                sb = int(sec_bin_val) if pd.notna(sec_bin_val) else None
+            except (TypeError, ValueError):
+                sb = None
+            if sb is None:
+                continue
+            ter_by_bin_out.append({
+                "job_name": str(row.get("job_name", "")),
+                "sec_bin": sb,
+                "n_50plus": int(row.get("n_50plus", 0)) if pd.notna(row.get("n_50plus")) else 0,
+                "n_below50": int(row.get("n_below50", 0)) if pd.notna(row.get("n_below50")) else 0,
             })
 
     # --- bump ---
@@ -227,6 +258,8 @@ def meta_overview(
         "shift_kpi": shift_kpi,
         "violin": violin_out,
         "ter": ter_out,
+        "ter_bands": ter_bands,
+        "ter_by_bin": ter_by_bin_out,
         "bump": bump_out,
         "version_changes": vc_out,
         "bump_xaxis_range": bump_xaxis_range,

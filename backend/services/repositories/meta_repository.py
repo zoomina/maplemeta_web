@@ -431,23 +431,91 @@ def _compute_violin(work: pd.DataFrame) -> pd.DataFrame:
     return violin
 
 
-def _compute_ter(work: pd.DataFrame) -> pd.DataFrame:
-    """TER = floor / clear_time_sec * 60, display range 40~69 floor.
-    Returns per-job: job_name, ter_p50 (median TER), floor50_rate (50층 이상 비율).
+def _compute_ter(work: pd.DataFrame) -> tuple[pd.DataFrame, dict, pd.DataFrame]:
+    """X-axis metric: record_sec/floor (층당 소요 초). Display range 40~69 floor.
+    Returns (ter_df, ter_bands, ter_by_bin).
+    ter_df: job_name, sec_per_floor_p50, floor50_rate, n, n_50plus, n_below50, n_in_relaxed.
+    ter_bands: relaxed_lo, relaxed_hi (50+ 하위 30%), near_lo, near_hi (50- 하위 30%).
+    ter_by_bin: job_name, sec_bin (정수 초), n_50plus, n_below50 (한 직업이 여러 구간에 분포 가능).
     """
+    empty_df = pd.DataFrame(
+        columns=["job_name", "sec_per_floor_p50", "floor50_rate", "n", "n_50plus", "n_below50", "n_in_relaxed"]
+    )
+    empty_bins = pd.DataFrame(columns=["job_name", "sec_bin", "n_50plus", "n_below50"])
+    empty_bands = {"relaxed_lo": None, "relaxed_hi": None, "near_lo": None, "near_hi": None}
     if "record_sec" not in work.columns:
-        return pd.DataFrame(columns=["job_name", "ter_p50", "floor50_rate"])
+        return empty_df, empty_bands, empty_bins
     temp = work[["job_name", "floor", "record_sec"]].dropna().copy()
     temp = temp[(temp["floor"] >= 40) & (temp["floor"] <= 69) & (temp["record_sec"] > 0)]
     if temp.empty:
-        return pd.DataFrame(columns=["job_name", "ter_p50", "floor50_rate"])
-    temp["ter"] = temp["floor"] / temp["record_sec"] * 60
+        return empty_df, empty_bands, empty_bins
+    temp["sec_per_floor"] = temp["record_sec"] / temp["floor"]
     temp["is_floor50"] = temp["floor"] >= 50
+
+    # 여유구간: 50층 이상 레코드 중 sec_per_floor가 빠른 순 상위 30%개가 들어가는 구간 (min~max)
+    # 근접구간: 50층 미만 레코드 중 동일하게 상위 30%개 구간
+    high = temp[temp["is_floor50"]]
+    low = temp[~temp["is_floor50"]]
+    relaxed_lo = relaxed_hi = near_lo = near_hi = None
+    if high.shape[0] >= 2:
+        sorted_high = high["sec_per_floor"].sort_values()
+        k = max(1, int(round(len(sorted_high) * 0.30)))
+        top30 = sorted_high.iloc[:k]
+        relaxed_lo = float(top30.min())
+        relaxed_hi = float(top30.max())
+    elif high.shape[0] == 1:
+        v = float(high["sec_per_floor"].iloc[0])
+        relaxed_lo = relaxed_hi = v
+    if low.shape[0] >= 2:
+        sorted_low = low["sec_per_floor"].sort_values()
+        k = max(1, int(round(len(sorted_low) * 0.30)))
+        top30 = sorted_low.iloc[:k]
+        near_lo = float(top30.min())
+        near_hi = float(top30.max())
+    elif low.shape[0] == 1:
+        v = float(low["sec_per_floor"].iloc[0])
+        near_lo = near_hi = v
+    ter_bands = {"relaxed_lo": relaxed_lo, "relaxed_hi": relaxed_hi, "near_lo": near_lo, "near_hi": near_hi}
+
+    # n_in_relaxed와 그래프 여유구간 표시는 동일한 relaxed_lo, relaxed_hi 사용 (위 ter_bands와 같음)
+    # 직업별 n_in_relaxed: 50+ 레코드만 대상, sec_per_floor가 [relaxed_lo, relaxed_hi] 안에 있는 개수
+    if relaxed_lo is not None and relaxed_hi is not None:
+        in_relaxed = (
+            temp["is_floor50"]
+            & (temp["sec_per_floor"] >= relaxed_lo)
+            & (temp["sec_per_floor"] <= relaxed_hi)
+        )
+        n_in_relaxed = temp.loc[in_relaxed].groupby("job_name").size().reset_index(name="n_in_relaxed")
+    else:
+        n_in_relaxed = pd.DataFrame(columns=["job_name", "n_in_relaxed"])
+
     agg = (
         temp.groupby("job_name", as_index=False)
-        .agg(ter_p50=("ter", "median"), floor50_rate=("is_floor50", "mean"))
+        .agg(
+            sec_per_floor_p50=("sec_per_floor", "median"),
+            floor50_rate=("is_floor50", "mean"),
+            n=("sec_per_floor", "count"),
+            n_50plus=("is_floor50", "sum"),
+        )
     )
-    return agg
+    agg["n_below50"] = agg["n"] - agg["n_50plus"]
+    agg["n_50plus"] = agg["n_50plus"].astype(int)
+    agg["n_below50"] = agg["n_below50"].astype(int)
+    agg = agg.merge(n_in_relaxed, on="job_name", how="left")
+    agg["n_in_relaxed"] = agg["n_in_relaxed"].fillna(0).astype(int)
+
+    # 직업별·시간구간(초)별 인원 (한 직업이 여러 구간에 분포 가능)
+    temp["sec_bin"] = temp["sec_per_floor"].astype(int)
+    bin_agg = (
+        temp.groupby(["job_name", "sec_bin"], as_index=False)
+        .agg(n_50plus=("is_floor50", "sum"), n=("is_floor50", "count"))
+    )
+    bin_agg["n_below50"] = bin_agg["n"] - bin_agg["n_50plus"]
+    bin_agg["n_50plus"] = bin_agg["n_50plus"].astype(int)
+    bin_agg["n_below50"] = bin_agg["n_below50"].astype(int)
+    ter_by_bin = bin_agg[["job_name", "sec_bin", "n_50plus", "n_below50"]].copy()
+
+    return agg, ter_bands, ter_by_bin
 
 
 def _compute_bump(all_work: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame]:
@@ -506,7 +574,9 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         "balance_cr3": None,
         "kpi_shift": None,
         "violin": pd.DataFrame(columns=["job_name", "floor", "floor_max", "floor_min", "floor_avg", "floor_median", "n"]),
-        "ter": pd.DataFrame(columns=["job_name", "ter_p50", "floor50_rate"]),
+        "ter": pd.DataFrame(columns=["job_name", "sec_per_floor_p50", "floor50_rate", "n", "n_50plus", "n_below50", "n_in_relaxed"]),
+        "ter_bands": None,
+        "ter_by_bin": pd.DataFrame(columns=["job_name", "sec_bin", "n_50plus", "n_below50"]),
         "bump_by_date": pd.DataFrame(columns=["date", "job_name", "rank", "rate", "count", "rate_delta_str", "achieved", "total"]),
         "bump_xaxis_range": None,
         "bump_top_date": None,
@@ -532,7 +602,7 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
     balance_data = _read_balance_score_from_dm(version, type_filter=type_filter)
 
     violin = _compute_violin(work)
-    ter = _compute_ter(work)
+    ter, ter_bands, ter_by_bin = _compute_ter(work)
     # bump chart: SQL GROUP BY 집계로 39k rows 전체 읽기 대체
     bump_by_date, version_change = _read_bump_from_db(type_filter)
 
@@ -603,6 +673,8 @@ def get_meta_overview(type_filter: str = "전체", version: str | None = None) -
         "shift_kpi": shift_kpi,
         "violin": violin,
         "ter": ter,
+        "ter_bands": ter_bands,
+        "ter_by_bin": ter_by_bin,
         "bump_by_date": bump_by_date,
         "bump_xaxis_range": bump_xaxis_range,
         "bump_top_date": bump_top_date,
