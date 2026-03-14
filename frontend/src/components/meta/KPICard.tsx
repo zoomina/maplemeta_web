@@ -93,12 +93,12 @@ export function KPICard({ title, value, caption, subtitle, unit = '점', type = 
         : arcPath(0.5, needleFrac))
     : '';
 
-  // ── 숫자 ─────────────────────────────────────────────
+  // ── 숫자 (원본 int, 소수 절삭) ─────────────────────────
   const numStr = value == null
     ? null
     : isBalance
       ? Math.round(value).toString()
-      : (value >= 0 ? '+' : '') + value.toFixed(1);
+      : (value >= 0 ? '+' : '') + Math.round(value);
 
   return (
     <div className="card flex flex-col items-center gap-2 py-4">
@@ -129,7 +129,7 @@ export function KPICard({ title, value, caption, subtitle, unit = '점', type = 
               <text x={87} y={62} textAnchor="middle" fill="#475569" fontSize="7">100</text>
             </svg>
           ) : (
-            <svg viewBox="0 0 100 74" className="w-full">
+            <svg viewBox="0 0 100 68" className="w-full">
               {/* 배경 컬러 세그먼트 (흐리게) */}
               {SHIFT_SEGS.map(([f1, f2, color], i) => (
                 <path key={i} d={arcPath(f1, f2)} fill="none" stroke={color} strokeWidth={SW} strokeLinecap="butt" opacity="0.35" />
@@ -138,15 +138,15 @@ export function KPICard({ title, value, caption, subtitle, unit = '점', type = 
               {activePath && (
                 <path d={activePath} fill="none" stroke={activeColor} strokeWidth={SW} strokeLinecap="round" />
               )}
-              <text x={CX} y={64} textAnchor="middle" fill="#E2E8F0" fontSize="15" fontWeight="900">
+              <text x={CX} y={46} textAnchor="middle" fill={activeColor} fontSize="20" fontWeight="900">
                 {numStr}
               </text>
-              <text x={CX} y={71} textAnchor="middle" fill="#64748B" fontSize="8">
+              <text x={CX} y={56} textAnchor="middle" fill="#64748B" fontSize="8">
                 {unit}
               </text>
-              {/* −는 좌(fraction=0 근처), +는 우(fraction=1 근처) */}
-              <text x={13} y={57} textAnchor="middle" fill="#EF4444" fontSize="10" fontWeight="700">−</text>
-              <text x={87} y={57} textAnchor="middle" fill="#22C55E" fontSize="10" fontWeight="700">+</text>
+              {/* −/+, 1번 카드 0/100과 동일 위치·스타일 */}
+              <text x={13} y={62} textAnchor="middle" fill="#475569" fontSize="7">−</text>
+              <text x={87} y={62} textAnchor="middle" fill="#475569" fontSize="7">+</text>
             </svg>
           )}
         </div>
