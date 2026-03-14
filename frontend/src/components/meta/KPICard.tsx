@@ -1,7 +1,7 @@
 // KPICard: 반원형 게이지 KPI 카드
-// balance: 우(0)에서 시작해 좌(100) 방향으로 채움
-// shift: 바늘 스타일, 중앙=0, 우=음수, 좌=양수
-// 변경일: 260313
+// balance: 좌(0)에서 시작해 우(100) 방향으로 채움
+// shift: 아크 스타일, 중앙=0, 좌=음수, 우=양수, 바늘 없음
+// 변경일: 260314
 
 const CX = 50;
 const CY = 50;
@@ -33,7 +33,16 @@ function balanceColor(s: number): string {
   return '#EF4444';
 }
 
-// 세그먼트: fraction=0(좌)=양수 극단, fraction=0.5(상단)=0, fraction=1(우)=음수 극단
+/** 중앙(0)에서 멀어질수록 빨간색 */
+function shiftColor(frac: number): string {
+  const dist = Math.abs(frac - 0.5) * 2; // 0=중앙, 1=극단
+  if (dist < 0.25) return '#86EFAC';
+  if (dist < 0.50) return '#EAB308';
+  if (dist < 0.75) return '#F97316';
+  return '#EF4444';
+}
+
+// 세그먼트: fraction=0(좌)=음수 극단, fraction=0.5(상단)=0, fraction=1(우)=양수 극단
 const SHIFT_SEGS: [number, number, string][] = [
   [SEG_GAP,           0.125 - SEG_GAP, '#EF4444'],
   [0.125 + SEG_GAP,   0.250 - SEG_GAP, '#F97316'],
@@ -64,25 +73,24 @@ export function KPICard({ title, value, caption, subtitle, unit = '점', type = 
   const balColor = isBalance && value != null ? balanceColor(value) : '#383B52';
   const bgPath = arcPath(0, 1);
 
-  // 채움: 우측 끝(fraction=1)에서 시작해 balFraction만큼 좌로
-  // arcPath(1 - balFraction, 1) → 우측 끝까지의 호
-  const fillStart = 1 - balFraction;
+  // 채움: 좌측 끝(fraction=0, 점수=0)에서 balFraction까지 (좌→우)
   const valPath = isBalance && value != null && balFraction > 0.005
-    ? (balFraction >= 0.995 ? bgPath : arcPath(fillStart, 1))
+    ? (balFraction >= 0.995 ? bgPath : arcPath(0, balFraction))
     : '';
 
   // ── Shift ────────────────────────────────────────────
-  // value=0 → 0.5(상단), value<0(음수) → 0.5 이상(우쪽), value>0(양수) → 0.5 미만(좌쪽)
+  // value<0 → 좌(fraction<0.5), value>0 → 우(fraction>0.5)
   const needleFrac = !isBalance && value != null
-    ? 0.5 - Math.max(-SHIFT_MAX, Math.min(SHIFT_MAX, value)) / (2 * SHIFT_MAX)
+    ? 0.5 + Math.max(-SHIFT_MAX, Math.min(SHIFT_MAX, value)) / (2 * SHIFT_MAX)
     : 0.5;
-  const [ntX, ntY] = arcPoint(needleFrac);
-  const nAngle = (1 - needleFrac) * Math.PI;
-  const bw = 2.8;
-  const blX = +(CX - bw * Math.sin(nAngle)).toFixed(2);
-  const blY = +(CY - bw * Math.cos(nAngle)).toFixed(2);
-  const brX = +(CX + bw * Math.sin(nAngle)).toFixed(2);
-  const brY = +(CY + bw * Math.cos(nAngle)).toFixed(2);
+  const activeColor = !isBalance && value != null ? shiftColor(needleFrac) : '#86EFAC';
+
+  // 활성 아크: 중앙(0.5)에서 값 위치까지
+  const activePath = !isBalance && value != null && Math.abs(value) > 0.05
+    ? (needleFrac < 0.5
+        ? arcPath(needleFrac, 0.5)
+        : arcPath(0.5, needleFrac))
+    : '';
 
   // ── 숫자 ─────────────────────────────────────────────
   const numStr = value == null
@@ -105,13 +113,9 @@ export function KPICard({ title, value, caption, subtitle, unit = '점', type = 
             <svg viewBox="0 0 100 68" className="w-full">
               {/* 배경 반원 */}
               <path d={bgPath} fill="none" stroke="#2A2D3E" strokeWidth={SW} strokeLinecap="round" />
-              {/* 값 채움: 우→좌 방향 */}
+              {/* 값 채움: 좌→우 방향 (0에서 값까지) */}
               {valPath && (
                 <path d={valPath} fill="none" stroke={balColor} strokeWidth={SW} strokeLinecap="round" />
-              )}
-              {/* 채움 경계 마커 */}
-              {balFraction > 0.02 && balFraction < 0.98 && (
-                <circle cx={arcPoint(fillStart)[0]} cy={arcPoint(fillStart)[1]} r={2} fill={balColor} />
               )}
               <text x={CX} y={46} textAnchor="middle" fill={balColor} fontSize="20" fontWeight="900">
                 {numStr}
@@ -119,29 +123,29 @@ export function KPICard({ title, value, caption, subtitle, unit = '점', type = 
               <text x={CX} y={56} textAnchor="middle" fill="#64748B" fontSize="8">
                 {unit}
               </text>
-              {/* 100=좌(fraction=0), 0=우(fraction=1) */}
-              <text x={13} y={62} textAnchor="middle" fill="#475569" fontSize="7">100</text>
-              <text x={87} y={62} textAnchor="middle" fill="#475569" fontSize="7">0</text>
+              {/* 0=좌(fraction=0), 100=우(fraction=1) */}
+              <text x={13} y={62} textAnchor="middle" fill="#475569" fontSize="7">0</text>
+              <text x={87} y={62} textAnchor="middle" fill="#475569" fontSize="7">100</text>
             </svg>
           ) : (
-            <svg viewBox="0 0 100 72" className="w-full">
-              {/* 컬러 세그먼트 */}
+            <svg viewBox="0 0 100 74" className="w-full">
+              {/* 배경 컬러 세그먼트 (흐리게) */}
               {SHIFT_SEGS.map(([f1, f2, color], i) => (
-                <path key={i} d={arcPath(f1, f2)} fill="none" stroke={color} strokeWidth={SW} strokeLinecap="butt" />
+                <path key={i} d={arcPath(f1, f2)} fill="none" stroke={color} strokeWidth={SW} strokeLinecap="butt" opacity="0.35" />
               ))}
-              {/* 바늘 */}
-              <polygon points={`${ntX},${ntY} ${blX},${blY} ${brX},${brY}`} fill="#CBD5E1" />
-              <circle cx={CX} cy={CY} r={5} fill="#334155" />
-              <circle cx={CX} cy={CY} r={2.5} fill="#CBD5E1" />
+              {/* 활성 아크: 중앙에서 값 위치까지 */}
+              {activePath && (
+                <path d={activePath} fill="none" stroke={activeColor} strokeWidth={SW} strokeLinecap="round" />
+              )}
               <text x={CX} y={64} textAnchor="middle" fill="#E2E8F0" fontSize="15" fontWeight="900">
                 {numStr}
               </text>
-              <text x={CX} y={72} textAnchor="middle" fill="#64748B" fontSize="8">
+              <text x={CX} y={71} textAnchor="middle" fill="#64748B" fontSize="8">
                 {unit}
               </text>
-              {/* +는 좌(fraction=0 근처), −는 우(fraction=1 근처) */}
-              <text x={13} y={57} textAnchor="middle" fill="#22C55E" fontSize="10" fontWeight="700">+</text>
-              <text x={87} y={57} textAnchor="middle" fill="#EF4444" fontSize="10" fontWeight="700">−</text>
+              {/* −는 좌(fraction=0 근처), +는 우(fraction=1 근처) */}
+              <text x={13} y={57} textAnchor="middle" fill="#EF4444" fontSize="10" fontWeight="700">−</text>
+              <text x={87} y={57} textAnchor="middle" fill="#22C55E" fontSize="10" fontWeight="700">+</text>
             </svg>
           )}
         </div>
